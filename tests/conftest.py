@@ -78,3 +78,49 @@ def zotero_db(tmp_path):
     conn.commit()
     conn.close()
     return db_path
+
+
+import numpy as np
+
+
+@pytest.fixture
+def embeddings_db(tmp_path):
+    """Empty embeddings DB with correct schema."""
+    db_path = tmp_path / "embeddings.db"
+    conn = sqlite3.connect(db_path)
+    conn.executescript("""
+        CREATE TABLE embeddings (
+            zotero_key TEXT PRIMARY KEY,
+            vector     BLOB NOT NULL,
+            embedded_at TEXT NOT NULL
+        );
+        CREATE TABLE meta (
+            key   TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
+        INSERT INTO meta VALUES ('model', 'BAAI/bge-small-en-v1.5');
+        INSERT INTO meta VALUES ('dims', '384');
+    """)
+    conn.commit()
+    conn.close()
+    return db_path
+
+
+def make_vector(seed: int, dims: int = 384) -> np.ndarray:
+    rng = np.random.default_rng(seed)
+    return rng.random(dims).astype(np.float32)
+
+
+def store_vector(db_path, key: str, vector: np.ndarray):
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        "INSERT OR REPLACE INTO embeddings (zotero_key, vector, embedded_at) VALUES (?, ?, datetime('now'))",
+        (key, vector.tobytes()),
+    )
+    conn.commit()
+    conn.close()
+
+
+@pytest.fixture
+def make_vector_fn():
+    return make_vector
