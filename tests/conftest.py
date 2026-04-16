@@ -98,15 +98,15 @@ def embeddings_db(tmp_path):
             key   TEXT PRIMARY KEY,
             value TEXT NOT NULL
         );
-        INSERT INTO meta VALUES ('model', 'BAAI/bge-small-en-v1.5');
-        INSERT INTO meta VALUES ('dims', '384');
+        INSERT INTO meta VALUES ('model', 'Alibaba-NLP/gte-modernbert-base');
+        INSERT INTO meta VALUES ('dims', '768');
     """)
     conn.commit()
     conn.close()
     return db_path
 
 
-def make_vector(seed: int, dims: int = 384) -> np.ndarray:
+def make_vector(seed: int, dims: int = 768) -> np.ndarray:
     rng = np.random.default_rng(seed)
     return rng.random(dims).astype(np.float32)
 

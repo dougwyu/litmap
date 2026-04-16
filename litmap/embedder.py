@@ -10,16 +10,17 @@ from tqdm import tqdm
 from litmap.zotero import get_all_items, Item, ZOTERO_DB
 
 EMBEDDINGS_DB = Path.home() / "LitLake" / "embeddings.db"
-MODEL_NAME = "BAAI/bge-small-en-v1.5"
-DIMS = 384
+MODEL_NAME = "Alibaba-NLP/gte-modernbert-base"
+DIMS = 768
+_BATCH_SIZE = 32
 _model = None
 
 
 def _get_model():
     global _model
     if _model is None:
-        from fastembed import TextEmbedding
-        _model = TextEmbedding(MODEL_NAME)
+        from sentence_transformers import SentenceTransformer
+        _model = SentenceTransformer(MODEL_NAME, device="mps")
     return _model
 
 
@@ -45,8 +46,8 @@ def init_db(db_path: Path = EMBEDDINGS_DB) -> None:
 
 def embed_text(text: str, db_path: Path = EMBEDDINGS_DB) -> np.ndarray:
     model = _get_model()
-    vectors = list(model.embed([text]))
-    return np.array(vectors[0], dtype=np.float32)
+    vecs = model.encode([text], normalize_embeddings=True)
+    return np.array(vecs[0], dtype=np.float32)
 
 
 def get_embedding(zotero_key: str, db_path: Path = EMBEDDINGS_DB) -> Optional[np.ndarray]:
@@ -108,13 +109,15 @@ def _embed_and_store(items: list[Item], db_path: Path) -> None:
     conn = sqlite3.connect(db_path)
     now = datetime.now(timezone.utc).isoformat()
     with tqdm(total=len(items), desc="Syncing new papers", unit="paper") as bar:
-        for item, text in zip(items, texts):
-            vec = next(model.embed([text]))
-            vec = np.array(vec, dtype=np.float32)
-            conn.execute(
-                "INSERT OR REPLACE INTO embeddings (zotero_key, vector, embedded_at) VALUES (?, ?, ?)",
-                (item.key, vec.tobytes(), now),
-            )
-            bar.update(1)
+        for batch_start in range(0, len(items), _BATCH_SIZE):
+            batch_items = items[batch_start:batch_start + _BATCH_SIZE]
+            batch_texts = texts[batch_start:batch_start + _BATCH_SIZE]
+            vecs = model.encode(batch_texts, normalize_embeddings=True, show_progress_bar=False)
+            for item, vec in zip(batch_items, vecs):
+                conn.execute(
+                    "INSERT OR REPLACE INTO embeddings (zotero_key, vector, embedded_at) VALUES (?, ?, ?)",
+                    (item.key, np.array(vec, dtype=np.float32).tobytes(), now),
+                )
+                bar.update(1)
     conn.commit()
     conn.close()

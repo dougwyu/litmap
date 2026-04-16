@@ -34,7 +34,7 @@ uv venv
 uv pip install -e .
 ```
 
-On first use, `fastembed` downloads the `BAAI/bge-small-en-v1.5` embedding model (~130 MB). Subsequent runs are fully offline.
+On first use, `sentence-transformers` downloads the `Alibaba-NLP/gte-modernbert-base` embedding model (~570 MB). Subsequent runs are fully offline. On Apple Silicon, inference uses Metal (MPS) automatically.
 
 ---
 
@@ -101,7 +101,7 @@ Embeddings are stored in `~/LitLake/embeddings.db` (SQLite, ~1 KB per paper). Th
 ```
 litmap/
 ├── zotero.py      Read-only access to ~/Zotero/zotero.sqlite
-├── embedder.py    fastembed model + ~/LitLake/embeddings.db cache
+├── embedder.py    sentence-transformers model + ~/LitLake/embeddings.db cache
 ├── layout.py      UMAP 2D layout + scikit-learn k-NN graph
 ├── search.py      Cosine similarity search + proper noun extraction
 ├── manuscript.py  Bibliography parser (PDF/DOCX/BibTeX/LaTeX)
@@ -115,7 +115,7 @@ litmap/
 
 - **[lit-lake](https://github.com/ElliotRoe/lit-lake)** by Elliot Roe — the original inspiration for this project. `litmap` replicates lit-lake's core embedding and search functionality as an auditable, dependency-light Python package, without the `.mcpb` installer or background daemon.
 - **[Claude](https://claude.ai)** (Anthropic) — this codebase was designed and implemented in a single session using Claude Code with the [Superpowers](https://github.com/superpowers) skill system for structured TDD and subagent-driven development.
-- **[fastembed](https://github.com/qdrant/fastembed)** — local embedding inference without a GPU.
+- **[sentence-transformers](https://www.sbert.net/)** + **[Alibaba-NLP/gte-modernbert-base](https://huggingface.co/Alibaba-NLP/gte-modernbert-base)** — local embedding inference; 768-dim GTE-ModernBERT (149M params, 8192-token context) with Metal GPU acceleration on Apple Silicon.
 - **[UMAP](https://github.com/lmcinnes/umap)** — dimensionality reduction for the semantic layout.
 
 ---

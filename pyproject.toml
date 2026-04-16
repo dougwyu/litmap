@@ -5,7 +5,7 @@ description = "Semantic map and search for Zotero libraries"
 requires-python = ">=3.11,<3.14"
 
 dependencies = [
-    "fastembed>=0.7.0,<1",
+    "sentence-transformers>=3.0.0",
     "umap-learn>=0.5.0",
     "scikit-learn>=1.4.0",
     "plotly>=5.0.0",

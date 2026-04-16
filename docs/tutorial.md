@@ -15,7 +15,7 @@ uv pip install -e .
 uv run litmap sync
 ```
 
-You will see a progress bar while `BAAI/bge-small-en-v1.5` (~130 MB) downloads and your Zotero library is embedded. This happens once. After that every command is instantaneous for the sync step (it only processes new items).
+You will see a progress bar while `Alibaba-NLP/gte-modernbert-base` (~570 MB) downloads and your Zotero library is embedded. This happens once. After that every command is instantaneous for the sync step (it only processes new items). On Apple Silicon, embeddings run on the Metal GPU (MPS) automatically.
 
 ```
 Syncing new papers: 100%|████████████████| 347/347 [01:23<00:00,  4.1 paper/s]
