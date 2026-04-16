@@ -1,0 +1,33 @@
+[project]
+name = "litmap"
+version = "0.1.0"
+description = "Semantic map and search for Zotero libraries"
+requires-python = ">=3.11,<3.14"
+
+dependencies = [
+    "fastembed>=0.7.0,<1",
+    "umap-learn>=0.5.0",
+    "scikit-learn>=1.4.0",
+    "plotly>=5.0.0",
+    "matplotlib>=3.8.0",
+    "adjustText>=1.0.0",
+    "pymupdf>=1.25.0,<2",
+    "python-docx>=1.0.0",
+    "typer>=0.12.0",
+    "tqdm>=4.66.0",
+    "numpy>=1.26.0",
+    "pandas>=2.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.0.0",
+    "pytest-mock>=3.0.0",
+]
+
+[project.scripts]
+litmap = "litmap.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
