@@ -67,6 +67,8 @@ Without the alias, prefix every command with `uv run` and run it from `~/src/Cow
 
 Open `litmap.html` in a browser for the interactive version. `litmap.png` and `litmap.pdf` are ready for publication.
 
+See [docs/tutorial.md](docs/tutorial.md) for a full walkthrough.
+
 ---
 
 ## CLI Reference
