@@ -40,19 +40,30 @@ On first use, `sentence-transformers` downloads the `Alibaba-NLP/gte-modernbert-
 
 ## Quick Start
 
+`uv run litmap` must be run from inside the project directory (or a subdirectory). The easiest way to make it available everywhere is a shell alias:
+
+```bash
+echo 'alias litmap="uv run --project ~/src/Cowork/litmap litmap"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+After that, you can run `litmap` from anywhere:
+
 ```bash
 # Search your library
-uv run litmap search --query "biodiversity measurement remote sensing" --top-k 5
+litmap search --query "biodiversity measurement remote sensing" --top-k 5
 
 # Map a Zotero collection
-uv run litmap map --collection "My Papers" --output ~/Desktop/litmap
+litmap map --collection "My Papers" --output ~/Desktop/litmap
 
 # Map a manuscript's bibliography
-uv run litmap map --manuscript paper.pdf --output ~/Desktop/litmap
+litmap map --manuscript paper.pdf --output ~/Desktop/litmap
 
 # Map a manuscript positioned within its cited collection
-uv run litmap map --collection "My Papers" --manuscript paper.pdf --output ~/Desktop/litmap
+litmap map --collection "My Papers" --manuscript paper.pdf --output ~/Desktop/litmap
 ```
+
+Without the alias, prefix every command with `uv run` and run it from `~/src/Cowork/litmap/`.
 
 Open `litmap.html` in a browser for the interactive version. `litmap.png` and `litmap.pdf` are ready for publication.
 

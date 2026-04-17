@@ -6,21 +6,34 @@ This tutorial walks through the main workflows: searching your Zotero library se
 
 ## 1. Setup
 
-Install and run once to trigger the model download and first sync:
+Install and add a shell alias so you can run `litmap` from any directory:
 
 ```bash
 cd ~/src/Cowork/litmap
 uv venv
 uv pip install -e .
-uv run litmap sync
+
+# Add a global alias (do this once)
+echo 'alias litmap="uv run --project ~/src/Cowork/litmap litmap"' >> ~/.zshrc
+source ~/.zshrc
 ```
 
-You will see a progress bar while `Alibaba-NLP/gte-modernbert-base` (~570 MB) downloads and your Zotero library is embedded. This happens once. After that every command is instantaneous for the sync step (it only processes new items). On Apple Silicon, embeddings run on the Metal GPU (MPS) automatically.
+Without the alias, `litmap` only works when your working directory is inside `~/src/Cowork/litmap/`. With the alias, `litmap` works from anywhere.
+
+Then run the initial sync:
+
+```bash
+litmap sync
+```
+
+You will see a progress bar while `Alibaba-NLP/gte-modernbert-base` (~570 MB) downloads and your Zotero library is embedded. On Apple Silicon, embeddings run on the Metal GPU (MPS) automatically.
 
 ```
 Syncing new papers: 100%|████████████████| 347/347 [01:23<00:00,  4.1 paper/s]
 Embedded 347 new papers.
 ```
+
+**Initial sync time:** The first sync embeds your entire Zotero library and only needs to run once. On a MacBook Air M4, embedding ~31,000 papers took approximately 6.5 hours. The Air throttles the CPU and GPU to manage heat, so throughput drops significantly after the first ~10,000 papers (from >100 papers/s down to ~10 papers/s). Incremental syncs — adding newly downloaded papers — are fast because they only process items not already in the cache, and those run before the chip has a chance to throttle.
 
 ---
 
@@ -29,7 +42,7 @@ Embedded 347 new papers.
 ### Find papers similar to a sentence
 
 ```bash
-uv run litmap search --query "deep learning models for species distribution modelling"
+litmap search --query "deep learning models for species distribution modelling"
 ```
 
 Output:
@@ -49,7 +62,7 @@ Scores range 0–1. Anything above ~0.85 is a strong semantic match.
 If you only want results from a particular Zotero collection:
 
 ```bash
-uv run litmap search \
+litmap search \
   --query "carbon sequestration tropical forests" \
   --collection "Chapter 2 refs" \
   --top-k 5
@@ -60,9 +73,9 @@ uv run litmap search \
 Find what else in your library is similar to a paper you already know:
 
 ```bash
-uv run litmap search --paper "10.1126/science.1256014"
+litmap search --paper "10.1126/science.1256014"
 # or by title:
-uv run litmap search --paper "Sensing biodiversity"
+litmap search --paper "Sensing biodiversity"
 ```
 
 The focal paper is excluded from its own results. If the title isn't an exact match, litmap suggests close alternatives.
@@ -72,7 +85,7 @@ The focal paper is excluded from its own results. If the title isn't an exact ma
 For scripting or use with other tools (e.g. the `manuscript-audit` skill):
 
 ```bash
-uv run litmap search \
+litmap search \
   --query "functional diversity trait-based ecology" \
   --format json | jq '.results[].title'
 ```
@@ -82,7 +95,7 @@ uv run litmap search \
 ## 3. Mapping a Zotero Collection
 
 ```bash
-uv run litmap map \
+litmap map \
   --collection "My Papers" \
   --output ~/Desktop/litmap_collection
 ```
@@ -101,10 +114,10 @@ Open the HTML file in any browser. Each node is a paper; edges connect the k nea
 
 ```bash
 # Tighter clusters (good for large libraries)
-uv run litmap map --collection "My Papers" --n-neighbors 30 --output ~/Desktop/dense
+litmap map --collection "My Papers" --n-neighbors 30 --output ~/Desktop/dense
 
 # Sparser graph edges
-uv run litmap map --collection "My Papers" --edge-k 2 --output ~/Desktop/sparse
+litmap map --collection "My Papers" --edge-k 2 --output ~/Desktop/sparse
 ```
 
 `--n-neighbors` controls the UMAP global structure (higher = broader view of neighbourhood). `--edge-k` controls how many edges each node draws.
@@ -116,7 +129,7 @@ uv run litmap map --collection "My Papers" --edge-k 2 --output ~/Desktop/sparse
 If you have a PDF, DOCX, `.bib`, or `.tex` file, litmap extracts its references and maps only the papers it can match in your Zotero library.
 
 ```bash
-uv run litmap map \
+litmap map \
   --manuscript ~/Documents/my_paper.pdf \
   --output ~/Desktop/litmap_bib
 ```
@@ -134,7 +147,7 @@ The most informative workflow: position your manuscript *within* its citation la
 Your manuscript appears as a red star at its semantic position among the collection papers. You can see which "neighbourhood" of the literature your paper falls in.
 
 ```bash
-uv run litmap map \
+litmap map \
   --collection "My Papers" \
   --manuscript ~/Documents/my_paper.pdf \
   --output ~/Desktop/litmap_positioned
@@ -145,7 +158,7 @@ uv run litmap map \
 Map just the papers you cited, with your manuscript at the centre.
 
 ```bash
-uv run litmap map \
+litmap map \
   --manuscript ~/Documents/my_paper.pdf \
   --output ~/Desktop/litmap_bib_only
 ```
@@ -155,7 +168,7 @@ uv run litmap map \
 Include every paper in the collection *plus* any additional papers from your bibliography not already in the collection. The manuscript node is added too.
 
 ```bash
-uv run litmap map \
+litmap map \
   --collection "My Papers" \
   --manuscript ~/Documents/my_paper.pdf \
   --union \
@@ -172,10 +185,10 @@ By default `--format all` writes HTML + PNG + PDF. To save time:
 
 ```bash
 # Interactive HTML only (fastest)
-uv run litmap map --collection "My Papers" --format html --output ~/Desktop/map
+litmap map --collection "My Papers" --format html --output ~/Desktop/map
 
 # Static files only (no Plotly overhead)
-uv run litmap map --collection "My Papers" --format png --output ~/Desktop/map
+litmap map --collection "My Papers" --format png --output ~/Desktop/map
 ```
 
 ---
@@ -187,7 +200,7 @@ If you use the `manuscript-audit` skill in Claude, it automatically calls `litma
 To check it's wired up correctly:
 
 ```bash
-uv run litmap search \
+litmap search \
   --query "biodiversity loss accelerating globally" \
   --format json
 ```
@@ -204,12 +217,12 @@ The cache updates automatically at the start of every command. When you add pape
 Syncing new papers: 100%|████| 12/12 [00:03<00:00,  3.8 paper/s]
 ```
 
-If Zotero is already up to date, nothing is printed and the command proceeds immediately.
+If Zotero is already up to date, nothing is printed and the command proceeds immediately. Incremental syncs are fast — a few dozen new papers takes seconds, well before any thermal throttling kicks in.
 
 To force a manual sync at any time:
 
 ```bash
-uv run litmap sync
+litmap sync
 ```
 
 ---
