@@ -166,14 +166,15 @@ def search_cmd(
         items = get_collection(collection, zotero_db)
         scope_keys = [i.key for i in items]
 
-    results = find_similar(query_vec, db_path, scope_keys=scope_keys, top_k=top_k, exclude_key=exclude_key)
+    # Fetch extra candidates so deduplication still yields top_k unique results
+    results = find_similar(query_vec, db_path, scope_keys=scope_keys, top_k=top_k * 4, exclude_key=exclude_key)
 
     # Enrich with Zotero metadata
     all_items = {i.key: i for i in get_all_items(zotero_db)}
-    enriched = []
+    enriched_all = []
     for r in results:
         item = all_items.get(r["key"])
-        enriched.append({
+        enriched_all.append({
             "zotero_key": r["key"],
             "title": item.title if item else r["key"],
             "authors": item.authors if item else [],
@@ -182,6 +183,9 @@ def search_cmd(
             "similarity": round(r["similarity"], 4),
             "doi": item.doi if item else "",
         })
+
+    from litmap.search import deduplicate_results
+    enriched = deduplicate_results(enriched_all, top_k=top_k)
 
     if fmt == "json":
         out = {"query": query_text[:120], "results": enriched}
