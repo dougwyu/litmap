@@ -28,8 +28,8 @@ Everything runs locally — no background daemon, no network calls after the fir
 ## Installation
 
 ```bash
-git clone <this-repo> ~/src/Cowork/litmap
-cd ~/src/Cowork/litmap
+git clone <this-repo> ~/your/path/litmap
+cd ~/your/path/litmap
 uv venv
 uv pip install -e .
 ```
@@ -43,7 +43,7 @@ On first use, `sentence-transformers` downloads the `Alibaba-NLP/gte-modernbert-
 `uv run litmap` must be run from inside the project directory (or a subdirectory). The easiest way to make it available everywhere is a shell alias:
 
 ```bash
-echo 'alias litmap="uv run --project ~/src/Cowork/litmap litmap"' >> ~/.zshrc
+echo 'alias litmap="uv run --project ~/your/path/litmap litmap"' >> ~/.zshrc
 source ~/.zshrc
 ```
 
