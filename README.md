@@ -63,7 +63,7 @@ litmap map --manuscript paper.pdf --output ~/Desktop/litmap
 litmap map --collection "My Papers" --manuscript paper.pdf --output ~/Desktop/litmap
 ```
 
-Without the alias, prefix every command with `uv run` and run it from `~/src/Cowork/litmap/`.
+Without the alias, prefix every command with `uv run` and run it from `~/your/path/litmap/`.
 
 Open `litmap.html` in a browser for the interactive version. `litmap.png` and `litmap.pdf` are ready for publication.
 
