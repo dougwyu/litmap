@@ -41,6 +41,35 @@ def find_similar(
     return results[:top_k]
 
 
+def deduplicate_results(
+    enriched: list[dict],
+    top_k: int,
+) -> list[dict]:
+    """Collapse duplicate papers from enriched search results.
+
+    Deduplication key: DOI (lowercased, stripped) if non-empty,
+    otherwise normalised title (lowercased, stripped).
+    Input must already be sorted by descending similarity — the first
+    occurrence of each canonical key is kept (highest score wins).
+    Returns at most top_k entries.
+    """
+    seen: set[str] = set()
+    unique: list[dict] = []
+    for r in enriched:
+        doi = (r.get("doi") or "").strip().lower()
+        title = (r.get("title") or "").strip().lower()
+        canon = doi if doi else title
+        if not canon:
+            unique.append(r)  # no dedup key available — keep as-is
+            continue
+        if canon not in seen:
+            seen.add(canon)
+            unique.append(r)
+        if len(unique) == top_k:
+            break
+    return unique
+
+
 # Matches: single ALL-CAPS acronyms (>=2 chars), or capitalised words/phrases
 _PROPER_NOUN_RE = re.compile(
     r'\b[A-Z]{2,}\b'                          # ALL-CAPS acronyms: GBIF, IPCC

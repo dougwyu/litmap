@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 from tests.conftest import store_vector, make_vector
-from litmap.search import find_similar, extract_proper_nouns
+from litmap.search import find_similar, extract_proper_nouns, deduplicate_results
 
 
 @pytest.fixture
@@ -56,3 +56,40 @@ def test_extract_proper_nouns_finds_capitalised_phrases():
     text = "The Intergovernmental Panel on Climate Change report was cited."
     nouns = extract_proper_nouns(text)
     assert any("Intergovernmental" in n for n in nouns)
+
+
+def test_dedup_by_doi_keeps_highest_score():
+    """Two entries with the same DOI → only the higher-scoring one survives."""
+    results = [
+        {"doi": "10.1234/abc", "title": "Paper A",  "similarity": 0.95},
+        {"doi": "10.1234/abc", "title": "Paper A",  "similarity": 0.80},
+        {"doi": "10.9999/xyz", "title": "Paper B",  "similarity": 0.70},
+    ]
+    deduped = deduplicate_results(results, top_k=10)
+    assert len(deduped) == 2
+    assert deduped[0]["similarity"] == 0.95
+    dois = [r["doi"] for r in deduped]
+    assert dois.count("10.1234/abc") == 1
+
+
+def test_dedup_by_title_when_no_doi():
+    """Two entries with no DOI but same title → only the first (highest score) survives."""
+    results = [
+        {"doi": "",  "title": "Ecology of Networks", "similarity": 0.90},
+        {"doi": "",  "title": "Ecology of Networks", "similarity": 0.85},
+        {"doi": "",  "title": "Climate and Change",  "similarity": 0.60},
+    ]
+    deduped = deduplicate_results(results, top_k=10)
+    assert len(deduped) == 2
+    assert deduped[0]["title"] == "Ecology of Networks"
+    assert deduped[0]["similarity"] == 0.90
+
+
+def test_dedup_respects_top_k():
+    """After deduplication, result list is truncated to top_k."""
+    results = [
+        {"doi": f"10.1/{i}", "title": f"Paper {i}", "similarity": 1.0 - i * 0.01}
+        for i in range(20)
+    ]
+    deduped = deduplicate_results(results, top_k=5)
+    assert len(deduped) == 5
