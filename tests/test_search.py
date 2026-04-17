@@ -93,3 +93,10 @@ def test_dedup_respects_top_k():
     ]
     deduped = deduplicate_results(results, top_k=5)
     assert len(deduped) == 5
+
+
+def test_dedup_no_key_items_respect_top_k():
+    """Items with no DOI and no title are kept but still respect top_k."""
+    results = [{"doi": "", "title": "", "similarity": 1.0 - i * 0.01} for i in range(10)]
+    deduped = deduplicate_results(results, top_k=3)
+    assert len(deduped) == 3

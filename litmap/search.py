@@ -61,8 +61,7 @@ def deduplicate_results(
         canon = doi if doi else title
         if not canon:
             unique.append(r)  # no dedup key available — keep as-is
-            continue
-        if canon not in seen:
+        elif canon not in seen:
             seen.add(canon)
             unique.append(r)
         if len(unique) == top_k:
