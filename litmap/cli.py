@@ -129,7 +129,7 @@ def search_cmd(
 ):
     """Find papers semantically similar to a query or focal paper."""
     from litmap.embedder import embed_text, init_db
-    from litmap.search import find_similar
+    from litmap.search import find_similar, deduplicate_results
     from litmap.zotero import get_all_items, get_collection, get_item
     import numpy as np
 
@@ -184,7 +184,6 @@ def search_cmd(
             "doi": item.doi if item else "",
         })
 
-    from litmap.search import deduplicate_results
     enriched = deduplicate_results(enriched_all, top_k=top_k)
 
     if fmt == "json":
