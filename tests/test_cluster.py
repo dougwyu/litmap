@@ -116,3 +116,85 @@ def test_label_clusters_single_paper_fallback():
     assignments = [{"key": "k1", "cluster_id": 1, "subcluster_id": None}]
     labels = label_clusters(items, assignments, level="cluster")
     assert labels[1] == "A fascinating analysis of citation"
+
+
+from litmap.cluster import build_outline
+
+
+def _mk_item(key, title="T", abstract="A", authors=None, year="2020", doi=""):
+    @dataclass
+    class Full:
+        key: str
+        title: str
+        abstract: str
+        authors: list
+        year: str
+        doi: str
+    return Full(key, title, abstract, authors or [], year, doi)
+
+
+def test_build_outline_structure():
+    items = [
+        _mk_item("k1", title="Paper one"),
+        _mk_item("k2", title="Paper two"),
+        _mk_item("k3", title="Paper three"),
+        _mk_item("k4", title="Paper four"),
+        _mk_item("k5", title="Paper five"),
+    ]
+    assignments = [
+        {"key": "k1", "cluster_id": 1, "subcluster_id": 1},
+        {"key": "k2", "cluster_id": 1, "subcluster_id": 1},
+        {"key": "k3", "cluster_id": 1, "subcluster_id": 2},
+        {"key": "k4", "cluster_id": 2, "subcluster_id": None},
+        {"key": "k5", "cluster_id": 2, "subcluster_id": None},
+    ]
+    outline = build_outline(
+        items=items,
+        assignments=assignments,
+        cluster_labels={1: "alpha", 2: "beta"},
+        subcluster_labels={(1, 1): "alpha-a", (1, 2): "alpha-b"},
+        existing_subcollections={},
+        input_meta={"collection": None, "manuscript": None, "union": False, "n_papers": 5},
+        params={"top_clusters": 2, "subcluster_threshold": 3},
+    )
+
+    assert outline["input"]["n_papers"] == 5
+    assert outline["params"]["top_clusters"] == 2
+    assert len(outline["clusters"]) == 2
+
+    c1 = outline["clusters"][0]
+    assert c1["cluster_id"] == 1
+    assert c1["label"] == "alpha"
+    assert c1["size"] == 3
+    assert c1["papers"] == []
+    assert len(c1["subclusters"]) == 2
+    assert c1["size"] == sum(sc["size"] for sc in c1["subclusters"]) + len(c1["papers"])
+
+    c2 = outline["clusters"][1]
+    assert c2["cluster_id"] == 2
+    assert c2["label"] == "beta"
+    assert c2["size"] == 2
+    assert c2["subclusters"] == []
+    assert len(c2["papers"]) == 2
+    assert {p["zotero_key"] for p in c2["papers"]} == {"k4", "k5"}
+
+
+def test_build_outline_existing_subcollections_attached():
+    items = [_mk_item("k1"), _mk_item("k2")]
+    assignments = [
+        {"key": "k1", "cluster_id": 1, "subcluster_id": None},
+        {"key": "k2", "cluster_id": 1, "subcluster_id": None},
+    ]
+    outline = build_outline(
+        items=items,
+        assignments=assignments,
+        cluster_labels={1: "x"},
+        subcluster_labels={},
+        existing_subcollections={"k1": ["A", "B"], "k2": []},
+        input_meta={"collection": None, "manuscript": None, "union": False, "n_papers": 2},
+        params={"top_clusters": 1, "subcluster_threshold": 100},
+    )
+    papers = outline["clusters"][0]["papers"]
+    by_key = {p["zotero_key"]: p for p in papers}
+    assert by_key["k1"]["existing_subcollections"] == ["A", "B"]
+    assert by_key["k2"]["existing_subcollections"] == []

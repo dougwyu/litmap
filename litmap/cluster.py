@@ -162,3 +162,73 @@ def _tfidf_labels(
             for gid in multi_ids:
                 out[gid] = f"cluster {gid}"
     return out
+
+
+def build_outline(
+    items: list,
+    assignments: list[dict],
+    cluster_labels: dict,
+    subcluster_labels: dict,
+    existing_subcollections: dict[str, list[str]],
+    input_meta: dict,
+    params: dict,
+) -> dict:
+    """Assemble the canonical JSON-shaped outline dict."""
+    items_by_key = {i.key: i for i in items}
+    assign_by_key = {a["key"]: a for a in assignments}
+
+    by_cluster: dict = _defaultdict(list)
+    for a in assignments:
+        by_cluster[a["cluster_id"]].append(a["key"])
+
+    clusters_out = []
+    for cid in sorted(by_cluster.keys()):
+        keys_in_cluster = by_cluster[cid]
+        sub_ids = {assign_by_key[k]["subcluster_id"] for k in keys_in_cluster}
+        is_subclustered = sub_ids != {None}
+
+        if is_subclustered:
+            sub_groups: dict = _defaultdict(list)
+            for k in keys_in_cluster:
+                sub_groups[assign_by_key[k]["subcluster_id"]].append(k)
+            sub_out = []
+            for sub_id in sorted(sub_groups.keys()):
+                sub_out.append({
+                    "subcluster_id": sub_id,
+                    "label": subcluster_labels.get((cid, sub_id), f"subcluster {sub_id}"),
+                    "size": len(sub_groups[sub_id]),
+                    "papers": [_paper_dict(items_by_key[k], existing_subcollections) for k in sub_groups[sub_id]],
+                })
+            clusters_out.append({
+                "cluster_id": cid,
+                "label": cluster_labels.get(cid, f"cluster {cid}"),
+                "size": len(keys_in_cluster),
+                "subclusters": sub_out,
+                "papers": [],
+            })
+        else:
+            clusters_out.append({
+                "cluster_id": cid,
+                "label": cluster_labels.get(cid, f"cluster {cid}"),
+                "size": len(keys_in_cluster),
+                "subclusters": [],
+                "papers": [_paper_dict(items_by_key[k], existing_subcollections) for k in keys_in_cluster],
+            })
+
+    return {
+        "input": input_meta,
+        "params": params,
+        "clusters": clusters_out,
+    }
+
+
+def _paper_dict(item, existing_subcollections: dict[str, list[str]]) -> dict:
+    authors = [a.split(",")[0].strip() if "," in a else a for a in getattr(item, "authors", [])]
+    return {
+        "zotero_key": item.key,
+        "title": item.title,
+        "authors": authors,
+        "year": getattr(item, "year", ""),
+        "doi": getattr(item, "doi", ""),
+        "existing_subcollections": list(existing_subcollections.get(item.key, [])),
+    }
