@@ -72,3 +72,93 @@ def cut_levels(
         }
         for i in range(n)
     ]
+
+
+from collections import defaultdict as _defaultdict
+
+
+def label_clusters(
+    items: list,
+    assignments: list[dict],
+    level: str,
+    top_n_terms: int = 3,
+) -> dict:
+    """Return a label mapping for clusters or subclusters.
+
+    level="cluster":    keys are int cluster_id
+    level="subcluster": keys are (cluster_id, subcluster_id) tuples; only
+                        papers whose subcluster_id is not None are considered,
+                        and labels are computed per-parent (so sub-cluster
+                        labels are distinctive within their branch).
+
+    Uses TF-IDF with English stopwords over one document per group.
+    Singleton groups fall back to the paper's first 5 title words.
+    """
+    from sklearn.feature_extraction.text import TfidfVectorizer
+
+    items_by_key = {i.key: i for i in items}
+
+    if level == "cluster":
+        groups: dict = _defaultdict(list)
+        for a in assignments:
+            groups[a["cluster_id"]].append(a["key"])
+        return _tfidf_labels(groups, items_by_key, top_n_terms, TfidfVectorizer)
+
+    if level == "subcluster":
+        parents: dict = _defaultdict(lambda: _defaultdict(list))
+        for a in assignments:
+            if a["subcluster_id"] is None:
+                continue
+            parents[a["cluster_id"]][a["subcluster_id"]].append(a["key"])
+        result: dict = {}
+        for parent_cid, sub_groups in parents.items():
+            sub_labels = _tfidf_labels(sub_groups, items_by_key, top_n_terms, TfidfVectorizer)
+            for sub_cid, lbl in sub_labels.items():
+                result[(parent_cid, sub_cid)] = lbl
+        return result
+
+    raise ValueError(f"level must be 'cluster' or 'subcluster', got {level!r}")
+
+
+def _tfidf_labels(
+    groups: dict,
+    items_by_key: dict,
+    top_n: int,
+    Vectoriser,
+) -> dict:
+    """Return {group_id: 'term1 · term2 · term3'}; singleton fallback."""
+    out: dict = {}
+
+    multi_ids = []
+    multi_docs = []
+    for gid, keys in groups.items():
+        if len(keys) == 1:
+            itm = items_by_key[keys[0]]
+            first_words = " ".join((itm.title or "").split()[:5])
+            out[gid] = first_words if first_words else f"cluster {gid}"
+        else:
+            doc = " ".join(
+                f"{items_by_key[k].title} {items_by_key[k].abstract}" for k in keys
+            )
+            multi_ids.append(gid)
+            multi_docs.append(doc)
+
+    if multi_docs:
+        vec = Vectoriser(
+            stop_words="english",
+            min_df=1,
+            max_df=0.8,
+            token_pattern=r"(?u)\b[A-Za-z][A-Za-z-]{2,}\b",
+        )
+        try:
+            X = vec.fit_transform(multi_docs)
+            vocab = vec.get_feature_names_out()
+            for row, gid in enumerate(multi_ids):
+                scores = X[row].toarray().ravel()
+                top_idx = scores.argsort()[::-1][:top_n]
+                terms = [vocab[i] for i in top_idx if scores[i] > 0]
+                out[gid] = " · ".join(terms) if terms else f"cluster {gid}"
+        except ValueError:
+            for gid in multi_ids:
+                out[gid] = f"cluster {gid}"
+    return out
