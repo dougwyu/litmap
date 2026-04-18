@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -318,3 +320,43 @@ def test_linkage_cache_round_trips(tmp_path):
     loaded = np.load(path)
     assert loaded.shape == linkage.shape
     assert np.allclose(loaded, linkage)
+
+
+from typer.testing import CliRunner
+from litmap.cli import app
+
+
+def test_cluster_cmd_smoke(tmp_path, zotero_db, embeddings_db):
+    """End-to-end: fixture has 3 real papers; cluster them and write all outputs."""
+    import sqlite3
+    v1 = np.array([1.0] + [0.0] * 767, dtype=np.float32)
+    v2 = np.array([0.0, 1.0] + [0.0] * 766, dtype=np.float32)
+    v3 = np.array([0.0, 0.0, 1.0] + [0.0] * 765, dtype=np.float32)
+    conn = sqlite3.connect(embeddings_db)
+    for key, vec in [("AAAA0001", v1), ("AAAA0002", v2), ("AAAA0004", v3)]:
+        conn.execute(
+            "INSERT OR REPLACE INTO embeddings VALUES (?, ?, datetime('now'))",
+            (key, vec.tobytes()),
+        )
+    conn.commit()
+    conn.close()
+
+    out_base = tmp_path / "smoke"
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "cluster",
+            "--top-clusters", "2",
+            "--subcluster-threshold", "99999",
+            "--output", str(out_base),
+            "--db-path", str(embeddings_db),
+            "--zotero-db", str(zotero_db),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+
+    for ext in (".json", ".md", ".html", ".pdf", ".png", ".linkage.npy"):
+        p = Path(str(out_base) + ext)
+        assert p.exists(), f"missing {p}"
+        assert p.stat().st_size > 0
