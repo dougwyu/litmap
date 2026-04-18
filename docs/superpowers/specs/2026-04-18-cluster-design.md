@@ -34,7 +34,7 @@ Options:
                                   [default: all]
 ```
 
-With `--format all`, the command writes `<output>.html`, `<output>.pdf`, `<output>.png`, `<output>.md`, `<output>.json`.
+With `--format all`, the command writes `<output>.html`, `<output>.pdf`, `<output>.png`, `<output>.md`, `<output>.json`, and `<output>.linkage.npy` (always written whenever `json` is part of the selected format — it's the binary companion to the JSON).
 
 Paper-set assembly rules exactly match those of `litmap map`:
 
@@ -147,6 +147,14 @@ Invariants:
 - If `subclusters` is empty, all papers live directly in `cluster.papers`.
 - `existing_subcollections` lists the immediate collections the paper sits in (not inherited from parent collections). Empty list means the paper is only at the library root.
 - `cluster_id` is 1-indexed and stable within a single run (order reflects left-to-right dendrogram order).
+
+### Linkage cache (`<output>.linkage.npy`)
+
+The raw scipy linkage matrix, saved via `np.save`. Shape `(N-1, 4)`. Written whenever the JSON is written. Its sibling file is always `<output>.json`, so a future command can load both together.
+
+Purpose: a future `litmap interdisciplinarity` command (see *Forward compatibility*) needs the full hierarchy to compute Rao-Stirling diversity without re-clustering — which would otherwise require embedding and linkage-computing an entire Zotero library from scratch every time.
+
+Users never need to open this file directly.
 
 ### Markdown (`<output>.md`)
 
@@ -288,6 +296,7 @@ New tests live in `tests/test_cluster.py` and extend `tests/test_zotero.py`. All
 | `test_render_outline_markdown_snapshot` | Markdown output matches a small pre-written expected string |
 | `test_render_outline_json_roundtrip` | `json.loads(render_outline_json(outline)) == outline` |
 | `test_render_dendrogram_html_smoke` | Produced HTML contains `<div id=` and a Plotly `<script>` tag |
+| `test_linkage_cache_round_trips` | `np.save` then `np.load` returns an array equal to the original linkage matrix |
 | `test_get_subcollection_map_returns_direct_collections_only` | For the fixture DB, returns the expected `{key: [names]}` mapping |
 | `test_cluster_cmd_smoke` | End-to-end: run the command over the fixture DBs and assert all five output files are created and non-empty |
 
@@ -299,7 +308,9 @@ Add to `pyproject.toml`:
 
 Already present: `scikit-learn>=1.4.0` (for `TfidfVectorizer`), `plotly`, `matplotlib`, `numpy`.
 
-## Forward compatibility — the "reorganise library" hook
+## Forward compatibility
+
+### The "reorganise library" hook
 
 The JSON output carries, for every paper, enough information for a future `litmap reorganise` command to operate without re-computing:
 
@@ -310,6 +321,26 @@ The JSON output carries, for every paper, enough information for a future `litma
 - Cluster labels and sizes
 
 No further work is required now to enable that feature.
+
+### The "rank papers by interdisciplinarity" hook
+
+A future `litmap interdisciplinarity` command will score papers by Rao-Stirling diversity — the standard bibliometric measure that combines variety (number of clusters touched), balance (evenness of distribution across them), and disparity (semantic distance between clusters):
+
+```
+D = Σ pᵢ pⱼ dᵢⱼ
+```
+
+where `p` is the proportion of a paper's bibliography in each cluster and `d` is semantic distance between cluster pairs.
+
+To make this work without re-clustering (which would be expensive on a 30k-paper Zotero library), three artefacts produced by `litmap cluster` must be available together:
+
+1. `<output>.json` — per-paper cluster assignments (already in the design)
+2. `<output>.linkage.npy` — the raw scipy linkage matrix, for recomputing sub-cluster assignments or traversing the hierarchy
+3. `~/LitLake/embeddings.db` — the embeddings (already exists and is stable)
+
+Cluster centroids and inter-cluster distance matrices are *not* cached — the future command computes them in one pass from `embeddings.db` + `cluster.json`. Caching them would bloat the JSON for marginal speedup.
+
+The linkage cache is the only additional artefact needed, and it is produced as part of this feature.
 
 ## Open questions
 
