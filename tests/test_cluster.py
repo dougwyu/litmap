@@ -198,3 +198,76 @@ def test_build_outline_existing_subcollections_attached():
     by_key = {p["zotero_key"]: p for p in papers}
     assert by_key["k1"]["existing_subcollections"] == ["A", "B"]
     assert by_key["k2"]["existing_subcollections"] == []
+
+
+import json as _json
+from litmap.cluster_render import render_outline_json, render_outline_markdown
+
+
+def _sample_outline() -> dict:
+    return {
+        "input": {"collection": "My Papers", "manuscript": None, "union": False, "n_papers": 3},
+        "params": {"top_clusters": 2, "subcluster_threshold": 10},
+        "clusters": [
+            {
+                "cluster_id": 1,
+                "label": "ecology · species",
+                "size": 2,
+                "subclusters": [],
+                "papers": [
+                    {
+                        "zotero_key": "k1",
+                        "title": "Species distribution",
+                        "authors": ["Valavi", "Elith"],
+                        "year": "2022",
+                        "doi": "10.1/geb",
+                        "existing_subcollections": ["Chapter 2"],
+                    },
+                    {
+                        "zotero_key": "k2",
+                        "title": "Habitat suitability",
+                        "authors": ["Guisan"],
+                        "year": "2017",
+                        "doi": "",
+                        "existing_subcollections": [],
+                    },
+                ],
+            },
+            {
+                "cluster_id": 2,
+                "label": "genome · sequencing",
+                "size": 1,
+                "subclusters": [],
+                "papers": [
+                    {
+                        "zotero_key": "k3",
+                        "title": "Assembly methods",
+                        "authors": ["Smith"],
+                        "year": "2021",
+                        "doi": "",
+                        "existing_subcollections": [],
+                    }
+                ],
+            },
+        ],
+    }
+
+
+def test_render_outline_json_roundtrip():
+    outline = _sample_outline()
+    text = render_outline_json(outline)
+    assert _json.loads(text) == outline
+
+
+def test_render_outline_markdown_snapshot():
+    text = render_outline_markdown(_sample_outline())
+    expected = (
+        "# litmap cluster — My Papers (3 papers)\n\n"
+        "## 1. ecology · species  (2 papers)\n\n"
+        "- Valavi et al. 2022 — *Species distribution*\n"
+        "  [in: Chapter 2]\n"
+        "- Guisan 2017 — *Habitat suitability*\n\n"
+        "## 2. genome · sequencing  (1 paper)\n\n"
+        "- Smith 2021 — *Assembly methods*\n"
+    )
+    assert text == expected
