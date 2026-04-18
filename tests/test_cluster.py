@@ -271,3 +271,50 @@ def test_render_outline_markdown_snapshot():
         "- Smith 2021 — *Assembly methods*\n"
     )
     assert text == expected
+
+
+from litmap.cluster_render import (
+    render_dendrogram_html,
+    render_dendrogram_static,
+)
+
+
+def _items_for(keys):
+    """Build minimal Items matching a list of keys."""
+    return [_mk_item(k, title=f"Title {k}", authors=["Author"], year="2020") for k in keys]
+
+
+def test_render_dendrogram_html_smoke():
+    matrix = _three_cluster_matrix()
+    keys = [f"k{i}" for i in range(9)]
+    linkage = compute_hierarchy(matrix)
+    assignments = cut_levels(linkage, keys, matrix, top_k=3, subcluster_threshold=99999)
+    items = _items_for(keys)
+    html = render_dendrogram_html(linkage, keys, items, assignments)
+    assert "<div" in html
+    assert "plotly" in html.lower()
+    assert "k0" in html  # leaf hovertext must include at least one zotero_key
+
+
+def test_render_dendrogram_static_writes_pdf_and_png(tmp_path):
+    matrix = _three_cluster_matrix()
+    keys = [f"k{i}" for i in range(9)]
+    linkage = compute_hierarchy(matrix)
+    assignments = cut_levels(linkage, keys, matrix, top_k=3, subcluster_threshold=99999)
+    items = _items_for(keys)
+    base = tmp_path / "dendro"
+    render_dendrogram_static(linkage, keys, items, assignments, base)
+    assert (tmp_path / "dendro.pdf").exists()
+    assert (tmp_path / "dendro.png").exists()
+    assert (tmp_path / "dendro.pdf").stat().st_size > 0
+    assert (tmp_path / "dendro.png").stat().st_size > 0
+
+
+def test_linkage_cache_round_trips(tmp_path):
+    matrix = _three_cluster_matrix()
+    linkage = compute_hierarchy(matrix)
+    path = tmp_path / "saved.linkage.npy"
+    np.save(path, linkage)
+    loaded = np.load(path)
+    assert loaded.shape == linkage.shape
+    assert np.allclose(loaded, linkage)
