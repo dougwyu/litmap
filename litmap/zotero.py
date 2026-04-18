@@ -126,3 +126,26 @@ def get_item(key_or_doi: str, db_path: Path = ZOTERO_DB) -> Optional[Item]:
         ).fetchall()
     items = _rows_to_items(rows)
     return items[0] if items else None
+
+
+def get_subcollection_map(db_path: Path = ZOTERO_DB) -> dict[str, list[str]]:
+    """Return {zotero_key: [collection_names]} for every non-attachment item.
+
+    Lists only the collections the item directly belongs to — parents of
+    a child collection are not included by inheritance.
+    """
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT i.key AS key, col.collectionName AS name
+            FROM items i
+            JOIN collectionItems ci ON ci.itemID = i.itemID
+            JOIN collections col ON col.collectionID = ci.collectionID
+            WHERE i.itemTypeID NOT IN (14, 26)
+            ORDER BY i.key, col.collectionName
+            """
+        ).fetchall()
+    mapping: dict[str, list[str]] = {}
+    for r in rows:
+        mapping.setdefault(r["key"], []).append(r["name"])
+    return mapping

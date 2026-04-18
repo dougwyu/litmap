@@ -48,9 +48,9 @@ def test_sync_embeds_only_new_items(zotero_db, tmp_path):
     with patch("litmap.embedder._get_model") as mock_model:
         fake_vec = np.ones(DIMS, dtype=np.float32)
         # encode() returns a (n_texts, DIMS) array for the whole batch
-        mock_model.return_value.encode.return_value = np.array([fake_vec, fake_vec])
+        mock_model.return_value.encode.return_value = np.array([fake_vec, fake_vec, fake_vec])
         count = sync(db_path, zotero_db)
-    assert count == 2  # two journalArticle items in fixture
+    assert count == 3  # three journalArticle items in fixture
 
     # second sync should embed 0 new items (encode never called)
     with patch("litmap.embedder._get_model") as mock_model:

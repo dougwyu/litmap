@@ -3,7 +3,7 @@ from litmap.zotero import get_all_items, get_collection, get_item, Item
 
 def test_get_all_items_excludes_attachments(zotero_db):
     items = get_all_items(zotero_db)
-    assert len(items) == 2
+    assert len(items) == 3
     keys = {i.key for i in items}
     assert 'AAAA0003' not in keys  # attachment excluded
 
@@ -42,3 +42,19 @@ def test_get_item_by_doi(zotero_db):
 
 def test_get_item_unknown_returns_none(zotero_db):
     assert get_item('NOTEXIST', zotero_db) is None
+
+
+def test_get_subcollection_map_returns_direct_collections_only(zotero_db):
+    from litmap.zotero import get_subcollection_map
+
+    mapping = get_subcollection_map(zotero_db)
+
+    # Attachment (AAAA0003) must be excluded
+    assert "AAAA0003" not in mapping
+
+    # Item 1 is in both My Papers and Sub A
+    assert set(mapping["AAAA0001"]) == {"My Papers", "Sub A"}
+    # Item 2 is only in My Papers
+    assert mapping["AAAA0002"] == ["My Papers"]
+    # Item 4 is only in Sub A
+    assert mapping["AAAA0004"] == ["Sub A"]
