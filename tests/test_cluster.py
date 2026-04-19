@@ -305,11 +305,37 @@ def test_render_dendrogram_static_writes_pdf_and_png(tmp_path):
     assignments = cut_levels(linkage, keys, matrix, top_k=3, subcluster_threshold=99999)
     items = _items_for(keys)
     base = tmp_path / "dendro"
-    render_dendrogram_static(linkage, keys, items, assignments, base)
+    render_dendrogram_static(linkage, keys, items, assignments, base, formats={"pdf", "png"})
     assert (tmp_path / "dendro.pdf").exists()
     assert (tmp_path / "dendro.png").exists()
     assert (tmp_path / "dendro.pdf").stat().st_size > 0
     assert (tmp_path / "dendro.png").stat().st_size > 0
+
+
+def test_render_dendrogram_static_pdf_only(tmp_path):
+    matrix = _three_cluster_matrix()
+    keys = [f"k{i}" for i in range(9)]
+    linkage = compute_hierarchy(matrix)
+    assignments = cut_levels(linkage, keys, matrix, top_k=3, subcluster_threshold=99999)
+    items = _items_for(keys)
+    base = tmp_path / "dendro"
+    render_dendrogram_static(linkage, keys, items, assignments, base, formats={"pdf"})
+    assert (tmp_path / "dendro.pdf").exists()
+    assert (tmp_path / "dendro.pdf").stat().st_size > 0
+    assert not (tmp_path / "dendro.png").exists()
+
+
+def test_render_dendrogram_static_png_only(tmp_path):
+    matrix = _three_cluster_matrix()
+    keys = [f"k{i}" for i in range(9)]
+    linkage = compute_hierarchy(matrix)
+    assignments = cut_levels(linkage, keys, matrix, top_k=3, subcluster_threshold=99999)
+    items = _items_for(keys)
+    base = tmp_path / "dendro"
+    render_dendrogram_static(linkage, keys, items, assignments, base, formats={"png"})
+    assert (tmp_path / "dendro.png").exists()
+    assert (tmp_path / "dendro.png").stat().st_size > 0
+    assert not (tmp_path / "dendro.pdf").exists()
 
 
 def test_linkage_cache_round_trips(tmp_path):
@@ -342,6 +368,107 @@ def test_cluster_cmd_smoke(tmp_path, zotero_db, embeddings_db):
     conn.close()
 
     out_base = tmp_path / "smoke"
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "cluster",
+            "--top-clusters", "2",
+            "--subcluster-threshold", "99999",
+            "--output", str(out_base),
+            "--db-path", str(embeddings_db),
+            "--zotero-db", str(zotero_db),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+
+    for ext in (".json", ".md", ".html", ".pdf", ".png", ".linkage.npy"):
+        p = Path(str(out_base) + ext)
+        assert p.exists(), f"missing {p}"
+        assert p.stat().st_size > 0
+
+
+def test_cluster_cmd_warns_on_unembedded_papers(
+    tmp_path, zotero_db, embeddings_db, monkeypatch
+):
+    """If some papers in the requested set lack embeddings, warn but proceed."""
+    import sqlite3
+    import litmap.cli as cli_module
+
+    # Skip auto-sync so unembedded papers stay unembedded (no real model call).
+    monkeypatch.setattr(cli_module, "_auto_sync", lambda *a, **k: None)
+
+    # Add a 4th journalArticle to zotero with no embedding. The full set then
+    # has 4 papers but only 3 are embedded, so 1 should be skipped with a warning.
+    conn = sqlite3.connect(zotero_db)
+    conn.executescript("""
+        INSERT INTO items VALUES (5, 2, 1, 'AAAA0005');
+        INSERT INTO itemDataValues VALUES (401, 'Unembedded Paper');
+        INSERT INTO itemDataValues VALUES (402, 'Abstract unembedded');
+        INSERT INTO itemDataValues VALUES (403, '2024');
+        INSERT INTO itemDataValues VALUES (404, '10.9999/zzz');
+        INSERT INTO itemData VALUES (5, 1, 401);
+        INSERT INTO itemData VALUES (5, 2, 402);
+        INSERT INTO itemData VALUES (5, 6, 403);
+        INSERT INTO itemData VALUES (5, 8, 404);
+    """)
+    conn.commit()
+    conn.close()
+
+    # Seed embeddings for 3 of the 4 journalArticle papers.
+    v1 = np.array([1.0] + [0.0] * 767, dtype=np.float32)
+    v2 = np.array([0.0, 1.0] + [0.0] * 766, dtype=np.float32)
+    v3 = np.array([0.0, 0.0, 1.0] + [0.0] * 765, dtype=np.float32)
+    conn = sqlite3.connect(embeddings_db)
+    for key, vec in [("AAAA0001", v1), ("AAAA0002", v2), ("AAAA0004", v3)]:
+        conn.execute(
+            "INSERT OR REPLACE INTO embeddings VALUES (?, ?, datetime('now'))",
+            (key, vec.tobytes()),
+        )
+    conn.commit()
+    conn.close()
+
+    out_base = tmp_path / "warn"
+    try:
+        runner = CliRunner(mix_stderr=False)
+    except TypeError:
+        # Newer click: stdout/stderr are always separate.
+        runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "cluster",
+            "--top-clusters", "2",
+            "--subcluster-threshold", "99999",
+            "--output", str(out_base),
+            "--db-path", str(embeddings_db),
+            "--zotero-db", str(zotero_db),
+        ],
+    )
+    assert result.exit_code == 0, (result.stdout, result.stderr)
+    combined = (result.stdout or "") + (result.stderr or "")
+    assert "1 of 4 papers have no embedding" in combined
+    assert "litmap sync" in combined
+
+
+def test_cluster_cmd_creates_nested_output_dir(tmp_path, zotero_db, embeddings_db):
+    """--output pointing into a non-existent directory should not crash."""
+    import sqlite3
+    v1 = np.array([1.0] + [0.0] * 767, dtype=np.float32)
+    v2 = np.array([0.0, 1.0] + [0.0] * 766, dtype=np.float32)
+    v3 = np.array([0.0, 0.0, 1.0] + [0.0] * 765, dtype=np.float32)
+    conn = sqlite3.connect(embeddings_db)
+    for key, vec in [("AAAA0001", v1), ("AAAA0002", v2), ("AAAA0004", v3)]:
+        conn.execute(
+            "INSERT OR REPLACE INTO embeddings VALUES (?, ?, datetime('now'))",
+            (key, vec.tobytes()),
+        )
+    conn.commit()
+    conn.close()
+
+    out_base = tmp_path / "nested" / "dir" / "base"
+    assert not out_base.parent.exists()
+
     runner = CliRunner()
     result = runner.invoke(
         app,

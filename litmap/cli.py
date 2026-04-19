@@ -37,6 +37,8 @@ def map_cmd(
     from litmap.renderer import render_html, render_static
     import numpy as np
 
+    Path(output).parent.mkdir(parents=True, exist_ok=True)
+
     _auto_sync(db_path, zotero_db)
 
     # --- Assemble paper set -------------------------------------------------
@@ -94,6 +96,13 @@ def map_cmd(
     # --- Load embeddings ----------------------------------------------------
     keys = [i.key for i in items]
     matrix, loaded_keys = load_all_embeddings(db_path, scope_keys=keys)
+    dropped = len(keys) - len(loaded_keys)
+    if dropped > 0:
+        typer.echo(
+            f"Note: {dropped} of {len(keys)} papers have no embedding yet and were skipped. "
+            f"Run `litmap sync` to embed them.",
+            err=True,
+        )
     if len(loaded_keys) < 2:
         typer.echo("Need at least 2 embedded papers.", err=True)
         raise typer.Exit(1)
@@ -223,6 +232,11 @@ def cluster_cmd(
     zotero_db: Path = typer.Option(_DEFAULT_ZOTERO, hidden=True),
 ):
     """Semantic hierarchical clustering of a paper set."""
+    VALID_FORMATS = {"html", "pdf", "png", "md", "json", "all"}
+    if fmt not in VALID_FORMATS:
+        typer.echo(f"Error: --format must be one of {sorted(VALID_FORMATS)}", err=True)
+        raise typer.Exit(1)
+
     from litmap.zotero import get_collection, get_all_items, get_subcollection_map
     from litmap.manuscript import parse_bibliography, match_items_to_zotero
     from litmap.embedder import load_all_embeddings
@@ -232,6 +246,8 @@ def cluster_cmd(
         render_outline_json, render_outline_markdown,
     )
     import numpy as np
+
+    Path(output).parent.mkdir(parents=True, exist_ok=True)
 
     _auto_sync(db_path, zotero_db)
 
@@ -260,6 +276,13 @@ def cluster_cmd(
 
     keys = [i.key for i in items]
     matrix, loaded_keys = load_all_embeddings(db_path, scope_keys=keys)
+    dropped = len(keys) - len(loaded_keys)
+    if dropped > 0:
+        typer.echo(
+            f"Note: {dropped} of {len(keys)} papers have no embedding yet and were skipped. "
+            f"Run `litmap sync` to embed them.",
+            err=True,
+        )
     if len(loaded_keys) < 2:
         typer.echo("Error: fewer than 2 embedded papers found. Run `litmap sync` first.", err=True)
         raise typer.Exit(1)
@@ -293,25 +316,27 @@ def cluster_cmd(
         params={"top_clusters": top_k, "subcluster_threshold": subcluster_threshold},
     )
 
-    want = {"all": {"html", "pdf", "png", "md", "json"}}.get(fmt, {fmt})
+    want = {"html", "pdf", "png", "md", "json"} if fmt == "all" else {fmt}
 
-    if "json" in want or fmt == "all":
+    if "json" in want:
         json_path = Path(str(output) + ".json")
         json_path.write_text(render_outline_json(outline))
         np.save(str(output) + ".linkage.npy", linkage)
         typer.echo(f"Wrote {json_path}")
         typer.echo(f"Wrote {output}.linkage.npy")
 
-    if "md" in want or fmt == "all":
+    if "md" in want:
         md_path = Path(str(output) + ".md")
         md_path.write_text(render_outline_markdown(outline))
         typer.echo(f"Wrote {md_path}")
 
-    if "html" in want or fmt == "all":
+    if "html" in want:
         html_path = Path(str(output) + ".html")
         html_path.write_text(render_dendrogram_html(linkage, keys, items, assignments))
         typer.echo(f"Wrote {html_path}")
 
-    if "pdf" in want or "png" in want or fmt == "all":
-        render_dendrogram_static(linkage, keys, items, assignments, output)
-        typer.echo(f"Wrote {output}.pdf and {output}.png")
+    static_formats = want & {"pdf", "png"}
+    if static_formats:
+        render_dendrogram_static(linkage, keys, items, assignments, output, formats=static_formats)
+        for f in sorted(static_formats):
+            typer.echo(f"Wrote {output}.{f}")
