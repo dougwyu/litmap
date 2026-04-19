@@ -32,6 +32,7 @@ def zotero_db(tmp_path):
         INSERT INTO items VALUES (1, 2, 1, 'AAAA0001');
         INSERT INTO items VALUES (2, 2, 1, 'AAAA0002');
         INSERT INTO items VALUES (3, 14, 1, 'AAAA0003');
+        INSERT INTO items VALUES (4, 2, 1, 'AAAA0004');
 
         CREATE TABLE itemDataValues (valueID INTEGER PRIMARY KEY, value TEXT);
         INSERT INTO itemDataValues VALUES (101, 'Ecology of Networks');
@@ -42,6 +43,10 @@ def zotero_db(tmp_path):
         INSERT INTO itemDataValues VALUES (202, 'Abstract about climate');
         INSERT INTO itemDataValues VALUES (203, '2022');
         INSERT INTO itemDataValues VALUES (204, '10.5678/cli');
+        INSERT INTO itemDataValues VALUES (301, 'Trait Based Analysis');
+        INSERT INTO itemDataValues VALUES (302, 'Abstract about traits');
+        INSERT INTO itemDataValues VALUES (303, '2023');
+        INSERT INTO itemDataValues VALUES (304, '10.1111/trait');
 
         CREATE TABLE itemData (itemID INTEGER, fieldID INTEGER, valueID INTEGER);
         INSERT INTO itemData VALUES (1, 1, 101);
@@ -52,6 +57,10 @@ def zotero_db(tmp_path):
         INSERT INTO itemData VALUES (2, 2, 202);
         INSERT INTO itemData VALUES (2, 6, 203);
         INSERT INTO itemData VALUES (2, 8, 204);
+        INSERT INTO itemData VALUES (4, 1, 301);
+        INSERT INTO itemData VALUES (4, 2, 302);
+        INSERT INTO itemData VALUES (4, 6, 303);
+        INSERT INTO itemData VALUES (4, 8, 304);
 
         CREATE TABLE creators (creatorID INTEGER PRIMARY KEY, firstName TEXT, lastName TEXT);
         INSERT INTO creators VALUES (1, 'Jane', 'Smith');
@@ -70,10 +79,13 @@ def zotero_db(tmp_path):
             libraryID INTEGER DEFAULT 1
         );
         INSERT INTO collections VALUES (1, 'My Papers', NULL, 1);
+        INSERT INTO collections VALUES (2, 'Sub A', 1, 1);
 
         CREATE TABLE collectionItems (collectionID INTEGER, itemID INTEGER);
         INSERT INTO collectionItems VALUES (1, 1);
         INSERT INTO collectionItems VALUES (1, 2);
+        INSERT INTO collectionItems VALUES (2, 1);
+        INSERT INTO collectionItems VALUES (2, 4);
     """)
     conn.commit()
     conn.close()

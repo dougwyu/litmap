@@ -37,6 +37,8 @@ def map_cmd(
     from litmap.renderer import render_html, render_static
     import numpy as np
 
+    Path(output).parent.mkdir(parents=True, exist_ok=True)
+
     _auto_sync(db_path, zotero_db)
 
     # --- Assemble paper set -------------------------------------------------
@@ -94,6 +96,13 @@ def map_cmd(
     # --- Load embeddings ----------------------------------------------------
     keys = [i.key for i in items]
     matrix, loaded_keys = load_all_embeddings(db_path, scope_keys=keys)
+    dropped = len(keys) - len(loaded_keys)
+    if dropped > 0:
+        typer.echo(
+            f"Note: {dropped} of {len(keys)} papers have no embedding yet and were skipped. "
+            f"Run `litmap sync` to embed them.",
+            err=True,
+        )
     if len(loaded_keys) < 2:
         typer.echo("Need at least 2 embedded papers.", err=True)
         raise typer.Exit(1)
@@ -208,3 +217,126 @@ def sync_cmd(
         typer.echo("Already up to date.")
     else:
         typer.echo(f"Embedded {count} new papers.")
+
+
+@app.command("cluster")
+def cluster_cmd(
+    collection: Optional[str] = typer.Option(None, "--collection", "-c", help="Zotero collection name"),
+    manuscript: Optional[Path] = typer.Option(None, "--manuscript", "-m", help="Manuscript file (PDF/DOCX/LaTeX)"),
+    union: bool = typer.Option(False, "--union", help="Use collection ∪ bibliography as paper set"),
+    top_clusters: Optional[int] = typer.Option(None, "--top-clusters", help="Number of level-1 clusters"),
+    subcluster_threshold: int = typer.Option(20, "--subcluster-threshold", help="Min cluster size that triggers level-2"),
+    output: Path = typer.Option(Path("litmap_cluster"), "--output", "-o", help="Output base path"),
+    fmt: str = typer.Option("all", "--format", "-f", help="html | pdf | png | md | json | all"),
+    db_path: Path = typer.Option(_DEFAULT_DB, hidden=True),
+    zotero_db: Path = typer.Option(_DEFAULT_ZOTERO, hidden=True),
+):
+    """Semantic hierarchical clustering of a paper set."""
+    VALID_FORMATS = {"html", "pdf", "png", "md", "json", "all"}
+    if fmt not in VALID_FORMATS:
+        typer.echo(f"Error: --format must be one of {sorted(VALID_FORMATS)}", err=True)
+        raise typer.Exit(1)
+
+    from litmap.zotero import get_collection, get_all_items, get_subcollection_map
+    from litmap.manuscript import parse_bibliography, match_items_to_zotero
+    from litmap.embedder import load_all_embeddings
+    from litmap.cluster import compute_hierarchy, cut_levels, label_clusters, build_outline
+    from litmap.cluster_render import (
+        render_dendrogram_html, render_dendrogram_static,
+        render_outline_json, render_outline_markdown,
+    )
+    import numpy as np
+
+    Path(output).parent.mkdir(parents=True, exist_ok=True)
+
+    _auto_sync(db_path, zotero_db)
+
+    if collection and manuscript and not union:
+        typer.echo("Error: pass --union to cluster both --collection and --manuscript, or pick one.", err=True)
+        raise typer.Exit(1)
+
+    if collection and manuscript and union:
+        coll_items = get_collection(collection, zotero_db)
+        bib_entries = parse_bibliography(manuscript)
+        bib_items, _ = match_items_to_zotero(bib_entries, zotero_db)
+        seen = {i.key for i in coll_items}
+        extra = [i for i in bib_items if i.key not in seen]
+        items = coll_items + extra
+    elif collection:
+        items = get_collection(collection, zotero_db)
+    elif manuscript:
+        bib_entries = parse_bibliography(manuscript)
+        items, _ = match_items_to_zotero(bib_entries, zotero_db)
+    else:
+        items = get_all_items(zotero_db)
+
+    if not items or len(items) < 2:
+        typer.echo("Error: need at least 2 papers to cluster.", err=True)
+        raise typer.Exit(1)
+
+    keys = [i.key for i in items]
+    matrix, loaded_keys = load_all_embeddings(db_path, scope_keys=keys)
+    dropped = len(keys) - len(loaded_keys)
+    if dropped > 0:
+        typer.echo(
+            f"Note: {dropped} of {len(keys)} papers have no embedding yet and were skipped. "
+            f"Run `litmap sync` to embed them.",
+            err=True,
+        )
+    if len(loaded_keys) < 2:
+        typer.echo("Error: fewer than 2 embedded papers found. Run `litmap sync` first.", err=True)
+        raise typer.Exit(1)
+    key_order = {k: i for i, k in enumerate(loaded_keys)}
+    items = [i for i in items if i.key in key_order]
+    items.sort(key=lambda it: key_order[it.key])
+    keys = [i.key for i in items]
+
+    n = len(keys)
+    top_k = top_clusters if top_clusters is not None else max(2, round((n / 2) ** 0.5))
+    top_k = min(top_k, n)
+
+    linkage = compute_hierarchy(matrix)
+    assignments = cut_levels(linkage, keys, matrix, top_k, subcluster_threshold)
+    cluster_labels = label_clusters(items, assignments, level="cluster")
+    subcluster_labels = label_clusters(items, assignments, level="subcluster")
+    subcols = get_subcollection_map(zotero_db)
+
+    outline = build_outline(
+        items=items,
+        assignments=assignments,
+        cluster_labels=cluster_labels,
+        subcluster_labels=subcluster_labels,
+        existing_subcollections=subcols,
+        input_meta={
+            "collection": collection,
+            "manuscript": str(manuscript) if manuscript else None,
+            "union": union,
+            "n_papers": n,
+        },
+        params={"top_clusters": top_k, "subcluster_threshold": subcluster_threshold},
+    )
+
+    want = {"html", "pdf", "png", "md", "json"} if fmt == "all" else {fmt}
+
+    if "json" in want:
+        json_path = Path(str(output) + ".json")
+        json_path.write_text(render_outline_json(outline))
+        np.save(str(output) + ".linkage.npy", linkage)
+        typer.echo(f"Wrote {json_path}")
+        typer.echo(f"Wrote {output}.linkage.npy")
+
+    if "md" in want:
+        md_path = Path(str(output) + ".md")
+        md_path.write_text(render_outline_markdown(outline))
+        typer.echo(f"Wrote {md_path}")
+
+    if "html" in want:
+        html_path = Path(str(output) + ".html")
+        html_path.write_text(render_dendrogram_html(linkage, keys, items, assignments))
+        typer.echo(f"Wrote {html_path}")
+
+    static_formats = want & {"pdf", "png"}
+    if static_formats:
+        render_dendrogram_static(linkage, keys, items, assignments, output, formats=static_formats)
+        for f in sorted(static_formats):
+            typer.echo(f"Wrote {output}.{f}")

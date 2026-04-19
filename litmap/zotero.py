@@ -4,7 +4,10 @@ import sqlite3
 from typing import Optional
 
 ZOTERO_DB = Path.home() / "Zotero" / "zotero.sqlite"
-EXCLUDED_TYPES = (14, 26)  # attachment, note
+# Zotero itemTypeIDs we exclude from all paper-level queries:
+# 14 = attachment, 26 = note. Neither represents a citable paper.
+EXCLUDED_TYPES = (14, 26)
+_EXCLUDED_TYPES_SQL = "(" + ",".join(str(t) for t in EXCLUDED_TYPES) + ")"
 
 
 @dataclass
@@ -72,7 +75,7 @@ _ITEM_SELECT = """
     LEFT JOIN itemDataValues doiv ON doiv.valueID = doid.valueID
     LEFT JOIN itemCreators ic ON ic.itemID = i.itemID AND ic.creatorTypeID = :author_type
     LEFT JOIN creators c ON c.creatorID = ic.creatorID
-    WHERE i.itemTypeID NOT IN (14, 26)
+    WHERE i.itemTypeID NOT IN """ + _EXCLUDED_TYPES_SQL + """
       AND tv.value IS NOT NULL
 """
 
@@ -126,3 +129,26 @@ def get_item(key_or_doi: str, db_path: Path = ZOTERO_DB) -> Optional[Item]:
         ).fetchall()
     items = _rows_to_items(rows)
     return items[0] if items else None
+
+
+def get_subcollection_map(db_path: Path = ZOTERO_DB) -> dict[str, list[str]]:
+    """Return {zotero_key: [collection_names]} for every non-attachment item.
+
+    Lists only the collections the item directly belongs to — parents of
+    a child collection are not included by inheritance.
+    """
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT i.key AS key, col.collectionName AS name
+            FROM items i
+            JOIN collectionItems ci ON ci.itemID = i.itemID
+            JOIN collections col ON col.collectionID = ci.collectionID
+            WHERE i.itemTypeID NOT IN """ + _EXCLUDED_TYPES_SQL + """
+            ORDER BY i.key, col.collectionName
+            """
+        ).fetchall()
+    mapping: dict[str, list[str]] = {}
+    for r in rows:
+        mapping.setdefault(r["key"], []).append(r["name"])
+    return mapping
