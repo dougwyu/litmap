@@ -4,6 +4,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import numpy as np
+
+from litmap._text import last_name
+
 
 def render_outline_json(outline: dict) -> str:
     """Return the outline as pretty-printed JSON (2-space indent)."""
@@ -59,9 +63,6 @@ def _short_ref(paper: dict) -> str:
     return f"{authors[0]} et al. {year}"
 
 
-import numpy as np
-
-
 def render_dendrogram_html(
     linkage: np.ndarray,
     keys: list[str],
@@ -81,13 +82,14 @@ def render_dendrogram_html(
             return k
         authors = getattr(it, "authors", []) or []
         year = getattr(it, "year", "") or ""
-        first = authors[0] if authors else "?"
+        first = last_name(authors[0]) if authors else "?"
         return f"{first} {year}".strip()
 
     labels = [short_ref(k) for k in keys]
 
     top_k = len(set(cluster_by_key.values()))
-    colour_threshold = linkage[-top_k, 2] if top_k >= 2 else linkage[-1, 2]
+    safe_top_k = min(top_k, len(linkage))
+    colour_threshold = linkage[-safe_top_k, 2] if safe_top_k >= 2 else linkage[-1, 2]
 
     fig = ff.create_dendrogram(
         np.arange(len(keys)).reshape(-1, 1),
@@ -152,12 +154,13 @@ def render_dendrogram_static(
             return k
         authors = getattr(it, "authors", []) or []
         year = getattr(it, "year", "") or ""
-        first = authors[0] if authors else "?"
+        first = last_name(authors[0]) if authors else "?"
         return f"{first} {year}".strip()
 
     labels = [short_ref(k) for k in keys]
     top_k = len({a["cluster_id"] for a in assignments})
-    colour_threshold = linkage[-top_k, 2] if top_k >= 2 else linkage[-1, 2]
+    safe_top_k = min(top_k, len(linkage))
+    colour_threshold = linkage[-safe_top_k, 2] if safe_top_k >= 2 else linkage[-1, 2]
 
     fig, ax = plt.subplots(figsize=(max(8, len(keys) * 0.25), 6))
     _dendrogram(

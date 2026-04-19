@@ -5,8 +5,12 @@ by the `litmap cluster` CLI command.
 """
 from __future__ import annotations
 
+from collections import defaultdict
+
 import numpy as np
-from scipy.cluster.hierarchy import linkage as _linkage
+from scipy.cluster.hierarchy import fcluster, linkage
+
+from litmap._text import last_name
 
 
 def compute_hierarchy(matrix: np.ndarray) -> np.ndarray:
@@ -20,10 +24,7 @@ def compute_hierarchy(matrix: np.ndarray) -> np.ndarray:
     """
     if matrix.shape[0] < 2:
         raise ValueError("compute_hierarchy requires at least 2 rows")
-    return _linkage(matrix, method="average", metric="cosine")
-
-
-from scipy.cluster.hierarchy import fcluster as _fcluster
+    return linkage(matrix, method="average", metric="cosine")
 
 
 def cut_levels(
@@ -45,9 +46,8 @@ def cut_levels(
     if matrix.shape[0] != n:
         raise ValueError("keys and matrix must have the same length")
 
-    level1 = _fcluster(linkage, t=top_k, criterion="maxclust")
+    level1 = fcluster(linkage, t=top_k, criterion="maxclust")
 
-    from collections import defaultdict
     groups: dict[int, list[int]] = defaultdict(list)
     for idx, cid in enumerate(level1):
         groups[int(cid)].append(idx)
@@ -60,7 +60,7 @@ def cut_levels(
         sub_matrix = matrix[idxs]
         sub_linkage = compute_hierarchy(sub_matrix)
         n_sub = max(2, round((size / 2) ** 0.5))
-        sub_labels = _fcluster(sub_linkage, t=n_sub, criterion="maxclust")
+        sub_labels = fcluster(sub_linkage, t=n_sub, criterion="maxclust")
         for local_i, idx in enumerate(idxs):
             subcluster_by_idx[idx] = int(sub_labels[local_i])
 
@@ -72,9 +72,6 @@ def cut_levels(
         }
         for i in range(n)
     ]
-
-
-from collections import defaultdict as _defaultdict
 
 
 def label_clusters(
@@ -99,13 +96,13 @@ def label_clusters(
     items_by_key = {i.key: i for i in items}
 
     if level == "cluster":
-        groups: dict = _defaultdict(list)
+        groups: dict = defaultdict(list)
         for a in assignments:
             groups[a["cluster_id"]].append(a["key"])
         return _tfidf_labels(groups, items_by_key, top_n_terms, TfidfVectorizer)
 
     if level == "subcluster":
-        parents: dict = _defaultdict(lambda: _defaultdict(list))
+        parents: dict = defaultdict(lambda: defaultdict(list))
         for a in assignments:
             if a["subcluster_id"] is None:
                 continue
@@ -177,7 +174,7 @@ def build_outline(
     items_by_key = {i.key: i for i in items}
     assign_by_key = {a["key"]: a for a in assignments}
 
-    by_cluster: dict = _defaultdict(list)
+    by_cluster: dict = defaultdict(list)
     for a in assignments:
         by_cluster[a["cluster_id"]].append(a["key"])
 
@@ -188,7 +185,7 @@ def build_outline(
         is_subclustered = sub_ids != {None}
 
         if is_subclustered:
-            sub_groups: dict = _defaultdict(list)
+            sub_groups: dict = defaultdict(list)
             for k in keys_in_cluster:
                 sub_groups[assign_by_key[k]["subcluster_id"]].append(k)
             sub_out = []
@@ -223,7 +220,7 @@ def build_outline(
 
 
 def _paper_dict(item, existing_subcollections: dict[str, list[str]]) -> dict:
-    authors = [a.split(",")[0].strip() if "," in a else a for a in getattr(item, "authors", [])]
+    authors = [last_name(a) for a in getattr(item, "authors", [])]
     return {
         "zotero_key": item.key,
         "title": item.title,

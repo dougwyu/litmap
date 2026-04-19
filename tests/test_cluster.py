@@ -338,6 +338,40 @@ def test_render_dendrogram_static_png_only(tmp_path):
     assert not (tmp_path / "dendro.pdf").exists()
 
 
+def test_render_dendrogram_clamps_top_k_at_n():
+    # Two points -> linkage has shape (1, 4). top_k=2 would index linkage[-2],
+    # which is out of bounds; the renderer must clamp to avoid IndexError.
+    matrix = np.array([
+        [1.0, 0.0] + [0.0] * 766,
+        [0.0, 1.0] + [0.0] * 766,
+    ], dtype=np.float32)
+    keys = ["k0", "k1"]
+    linkage = compute_hierarchy(matrix)
+    # Two singleton clusters -> top_k == n == 2.
+    assignments = [
+        {"key": "k0", "cluster_id": 1, "subcluster_id": None},
+        {"key": "k1", "cluster_id": 2, "subcluster_id": None},
+    ]
+    items = _items_for(keys)
+    html = render_dendrogram_html(linkage, keys, items, assignments)
+    assert "<div" in html
+
+
+def test_dendrogram_leaf_labels_use_last_name_only():
+    # Authors stored "Last, First" must render as "Last" in leaf labels.
+    matrix = _three_cluster_matrix()
+    keys = [f"k{i}" for i in range(9)]
+    linkage = compute_hierarchy(matrix)
+    assignments = cut_levels(linkage, keys, matrix, top_k=3, subcluster_threshold=99999)
+    items = [
+        _mk_item(k, title=f"Title {k}", authors=["Smith, Jane"], year="2022")
+        for k in keys
+    ]
+    html = render_dendrogram_html(linkage, keys, items, assignments)
+    assert "Smith, Jane 2022" not in html
+    assert "Smith 2022" in html
+
+
 def test_linkage_cache_round_trips(tmp_path):
     matrix = _three_cluster_matrix()
     linkage = compute_hierarchy(matrix)
