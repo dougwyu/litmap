@@ -179,7 +179,92 @@ This is the most complete view: the full collection provides context, and any pa
 
 ---
 
-## 6. Only Generating One Output Format
+## 6. Clustering a Paper Set
+
+`litmap cluster` groups papers into a labelled semantic hierarchy (up to two levels) and produces both a **dendrogram** (for visual inspection) and an **outline** (for reading).
+
+### Cluster a collection
+
+```bash
+litmap cluster \
+  --collection "My Papers" \
+  --output ~/Desktop/litmap_clusters
+```
+
+This writes six files:
+
+| File | Use |
+|---|---|
+| `litmap_clusters.html` | Interactive dendrogram — hover on a leaf to see title and Zotero key |
+| `litmap_clusters.png` / `.pdf` | Static dendrogram, 300 DPI |
+| `litmap_clusters.md` | Human-readable outline: each cluster labelled by TF-IDF keywords, members listed as short references |
+| `litmap_clusters.json` | Machine-readable outline (same structure), ready for scripting |
+| `litmap_clusters.linkage.npy` | scipy linkage cache — skip re-clustering in downstream analyses |
+
+The Markdown outline looks like this:
+
+```markdown
+# litmap cluster — My Papers (74 papers)
+
+## 1. species · distribution · modelling  (28 papers)
+- Valavi et al. 2022 — *Predictive performance of presence-only SDMs*
+- Norberg 2019 — *A comprehensive evaluation of predictive performance of 33 SDMs*
+  [in: Chapter 2]
+...
+
+## 2. genome · sequencing · annotation  (14 papers)
+...
+```
+
+### Cluster a manuscript's bibliography
+
+```bash
+litmap cluster \
+  --manuscript ~/Documents/my_paper.pdf \
+  --output ~/Desktop/bib_clusters
+```
+
+Useful for building a discussion section outline: the clusters reveal the thematic groupings implicit in what you cited.
+
+### Tuning the hierarchy
+
+```bash
+# Force exactly 5 top-level clusters
+litmap cluster --collection "My Papers" --top-clusters 5 --output ~/Desktop/c5
+
+# Split any cluster with 10+ papers into sub-clusters (default threshold: 20)
+litmap cluster --collection "My Papers" --subcluster-threshold 10 --output ~/Desktop/deep
+```
+
+`--top-clusters` defaults to `max(2, round(√(N/2)))` — about 6 clusters for a 72-paper collection, 12 for a 288-paper collection. Papers in any level-1 cluster whose size ≥ `--subcluster-threshold` are recursively split into `max(2, round(√(size/2)))` sub-clusters.
+
+### Cluster the entire library
+
+If you omit both `--collection` and `--manuscript`, litmap clusters every non-attachment item in your Zotero library. For a 30k-paper library, expect the clustering step itself to take a minute or two.
+
+```bash
+litmap cluster --output ~/Desktop/full_library_clusters
+```
+
+### Existing Zotero sub-collections
+
+If papers already belong to Zotero sub-collections, those are listed in the outline as `[in: Sub-Collection Name]` alongside each entry. This lets you compare litmap's semantic grouping against your manual curation — handy before deciding whether to reorganise.
+
+### Picking just one format
+
+Same as `litmap map`:
+
+```bash
+# Outline only, no dendrogram
+litmap cluster --collection "My Papers" --format md --output ~/Desktop/outline
+
+# Interactive dendrogram only
+litmap cluster --collection "My Papers" --format html --output ~/Desktop/dendro
+```
+
+---
+
+## 7. Only Generating One Output Format
 
 By default `--format all` writes HTML + PNG + PDF. To save time:
 
@@ -193,7 +278,7 @@ litmap map --collection "My Papers" --format png --output ~/Desktop/map
 
 ---
 
-## 7. Using litmap with the manuscript-audit Skill
+## 8. Using litmap with the manuscript-audit Skill
 
 If you use the `manuscript-audit` skill in Claude, it automatically calls `litmap search` during Stage 2 (citation gap detection) to find semantically relevant papers for unsupported claims. It falls back to keyword search if litmap is unavailable.
 
@@ -209,7 +294,7 @@ If this returns valid JSON, the skill will use it.
 
 ---
 
-## 8. Keeping the Embedding Cache Up to Date
+## 9. Keeping the Embedding Cache Up to Date
 
 The cache updates automatically at the start of every command. When you add papers to Zotero, the next `litmap` invocation will embed them:
 

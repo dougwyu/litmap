@@ -10,6 +10,7 @@ Everything runs locally — no background daemon, no network calls after the fir
 
 - **`litmap map`** — UMAP scatter plot of papers with k-nearest-neighbour edges, coloured by semantic position. Outputs interactive Plotly HTML and publication-quality PNG/PDF (300 DPI).
 - **`litmap search`** — Cosine similarity search over your Zotero library for a query sentence, passage, or focal paper. Outputs a ranked table or JSON.
+- **`litmap cluster`** — Hierarchical semantic clustering (≤2 levels) of a collection, bibliography, or the whole library. Outputs an interactive dendrogram (HTML), static dendrograms (PNG/PDF), a labelled outline (Markdown + JSON), and a `.linkage.npy` cache for downstream analyses.
 - **`litmap sync`** — Manually trigger embedding of all Zotero items.
 - **Auto-sync** — Every command automatically embeds any Zotero items not yet in the cache before running. A `tqdm` progress bar appears during sync; silent if already up to date.
 - **Four map modes** — collection only, manuscript bibliography only, intersection, or full union.
@@ -61,6 +62,9 @@ litmap map --manuscript paper.pdf --output ~/Desktop/litmap
 
 # Map a manuscript positioned within its cited collection
 litmap map --collection "My Papers" --manuscript paper.pdf --output ~/Desktop/litmap
+
+# Cluster a collection into a labelled semantic hierarchy
+litmap cluster --collection "My Papers" --output ~/Desktop/clusters
 ```
 
 Without the alias, prefix every command with `uv run` and run it from `~/your/path/litmap/`.
@@ -97,6 +101,21 @@ Options:
   -f, --format TEXT         table | json [default: table]
 ```
 
+### `litmap cluster`
+
+```
+Options:
+  -c, --collection TEXT         Zotero collection name
+  -m, --manuscript PATH         Manuscript file (PDF, DOCX, .bib, .tex)
+      --union                   Use collection ∪ manuscript bibliography
+      --top-clusters INT        Number of level-1 clusters [default: auto]
+      --subcluster-threshold INT Min cluster size that triggers level-2 [default: 20]
+  -o, --output PATH             Output base path [default: litmap_cluster]
+  -f, --format TEXT             html | pdf | png | md | json | all [default: all]
+```
+
+Writes `<output>.html` (interactive dendrogram), `.pdf` + `.png` (static 300 DPI), `.md` + `.json` (labelled outline), and `.linkage.npy` (scipy linkage cache). If neither `--collection` nor `--manuscript` is given, the entire library is clustered. Level-1 cluster count defaults to `max(2, round(√(N/2)))`; any level-1 cluster with at least `--subcluster-threshold` papers is split into sub-clusters. Cluster labels are TF-IDF keyword triplets over title + abstract.
+
 ### `litmap sync`
 
 Force re-sync of all Zotero items (normally runs automatically).
@@ -118,8 +137,10 @@ litmap/
 ├── layout.py      UMAP 2D layout + scikit-learn k-NN graph
 ├── search.py      Cosine similarity search + proper noun extraction
 ├── manuscript.py  Bibliography parser (PDF/DOCX/BibTeX/LaTeX)
-├── renderer.py    Plotly HTML + matplotlib PNG/PDF
-└── cli.py         Typer CLI — map, search, sync
+├── renderer.py    Plotly HTML + matplotlib PNG/PDF (for `map`)
+├── cluster.py     Hierarchical clustering, TF-IDF labelling, outline
+├── cluster_render.py  Dendrograms (Plotly HTML + matplotlib) + outline renderers
+└── cli.py         Typer CLI — map, search, cluster, sync
 ```
 
 ---
