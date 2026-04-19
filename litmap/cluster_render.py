@@ -125,8 +125,20 @@ def render_dendrogram_static(
     items: list,
     assignments: list[dict],
     path: Path,
+    formats: set[str] | None = None,
 ) -> None:
-    """Write <path>.pdf and <path>.png (300 DPI) using matplotlib."""
+    """Write <path>.pdf and/or <path>.png (300 DPI) using matplotlib.
+
+    `formats` may contain "pdf", "png", or both. Defaults to {"pdf", "png"}.
+    """
+    if formats is None:
+        formats = {"pdf", "png"}
+    unknown = formats - {"pdf", "png"}
+    if unknown:
+        raise ValueError(f"render_dendrogram_static: unknown formats {sorted(unknown)}")
+    if not formats:
+        return
+
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -162,6 +174,8 @@ def render_dendrogram_static(
     fig.tight_layout()
 
     path = Path(path)
-    fig.savefig(str(path) + ".pdf", dpi=300, bbox_inches="tight")
-    fig.savefig(str(path) + ".png", dpi=300, bbox_inches="tight")
+    if "pdf" in formats:
+        fig.savefig(str(path) + ".pdf", dpi=300, bbox_inches="tight")
+    if "png" in formats:
+        fig.savefig(str(path) + ".png", dpi=300, bbox_inches="tight")
     plt.close(fig)

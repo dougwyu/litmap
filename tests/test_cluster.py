@@ -487,3 +487,155 @@ def test_cluster_cmd_creates_nested_output_dir(tmp_path, zotero_db, embeddings_d
         p = Path(str(out_base) + ext)
         assert p.exists(), f"missing {p}"
         assert p.stat().st_size > 0
+
+
+def test_cluster_cmd_collection_and_manuscript_without_union_errors(
+    tmp_path, zotero_db, embeddings_db, monkeypatch
+):
+    """--collection + --manuscript without --union must exit 1 with helpful message."""
+    import litmap.cli as cli_module
+    monkeypatch.setattr(cli_module, "_auto_sync", lambda *a, **k: None)
+
+    dummy_manuscript = tmp_path / "dummy.tex"
+    dummy_manuscript.write_text("")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "cluster",
+            "--collection", "My Papers",
+            "--manuscript", str(dummy_manuscript),
+            "--output", str(tmp_path / "out"),
+            "--db-path", str(embeddings_db),
+            "--zotero-db", str(zotero_db),
+        ],
+    )
+    assert result.exit_code == 1, result.output
+    assert "pass --union" in result.output
+
+
+def test_cluster_cmd_fewer_than_two_embedded_errors(
+    tmp_path, zotero_db, embeddings_db, monkeypatch
+):
+    """If only 1 of the fixture's papers has an embedding, cluster must exit 1."""
+    import sqlite3
+    import litmap.cli as cli_module
+    # Skip auto-sync so no real embedding happens; we control what is embedded.
+    monkeypatch.setattr(cli_module, "_auto_sync", lambda *a, **k: None)
+
+    v1 = np.array([1.0] + [0.0] * 767, dtype=np.float32)
+    conn = sqlite3.connect(embeddings_db)
+    conn.execute(
+        "INSERT OR REPLACE INTO embeddings VALUES (?, ?, datetime('now'))",
+        ("AAAA0001", v1.tobytes()),
+    )
+    conn.commit()
+    conn.close()
+
+    try:
+        runner = CliRunner(mix_stderr=False)
+    except TypeError:
+        runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "cluster",
+            "--output", str(tmp_path / "out"),
+            "--db-path", str(embeddings_db),
+            "--zotero-db", str(zotero_db),
+        ],
+    )
+    assert result.exit_code == 1, (result.stdout, getattr(result, "stderr", ""))
+    combined = (result.stdout or "") + (getattr(result, "stderr", "") or "")
+    assert "fewer than 2 embedded papers" in combined
+
+
+def test_cluster_cmd_format_pdf_only(tmp_path, zotero_db, embeddings_db):
+    """--format pdf writes .pdf but NOT .png."""
+    import sqlite3
+    v1 = np.array([1.0] + [0.0] * 767, dtype=np.float32)
+    v2 = np.array([0.0, 1.0] + [0.0] * 766, dtype=np.float32)
+    v3 = np.array([0.0, 0.0, 1.0] + [0.0] * 765, dtype=np.float32)
+    conn = sqlite3.connect(embeddings_db)
+    for key, vec in [("AAAA0001", v1), ("AAAA0002", v2), ("AAAA0004", v3)]:
+        conn.execute(
+            "INSERT OR REPLACE INTO embeddings VALUES (?, ?, datetime('now'))",
+            (key, vec.tobytes()),
+        )
+    conn.commit()
+    conn.close()
+
+    out_base = tmp_path / "pdfonly"
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "cluster",
+            "--top-clusters", "2",
+            "--subcluster-threshold", "99999",
+            "--output", str(out_base),
+            "--format", "pdf",
+            "--db-path", str(embeddings_db),
+            "--zotero-db", str(zotero_db),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert Path(str(out_base) + ".pdf").exists()
+    assert not Path(str(out_base) + ".png").exists()
+    assert not Path(str(out_base) + ".html").exists()
+    assert not Path(str(out_base) + ".json").exists()
+    assert not Path(str(out_base) + ".md").exists()
+
+
+def test_cluster_cmd_format_png_only(tmp_path, zotero_db, embeddings_db):
+    """--format png writes .png but NOT .pdf."""
+    import sqlite3
+    v1 = np.array([1.0] + [0.0] * 767, dtype=np.float32)
+    v2 = np.array([0.0, 1.0] + [0.0] * 766, dtype=np.float32)
+    v3 = np.array([0.0, 0.0, 1.0] + [0.0] * 765, dtype=np.float32)
+    conn = sqlite3.connect(embeddings_db)
+    for key, vec in [("AAAA0001", v1), ("AAAA0002", v2), ("AAAA0004", v3)]:
+        conn.execute(
+            "INSERT OR REPLACE INTO embeddings VALUES (?, ?, datetime('now'))",
+            (key, vec.tobytes()),
+        )
+    conn.commit()
+    conn.close()
+
+    out_base = tmp_path / "pngonly"
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "cluster",
+            "--top-clusters", "2",
+            "--subcluster-threshold", "99999",
+            "--output", str(out_base),
+            "--format", "png",
+            "--db-path", str(embeddings_db),
+            "--zotero-db", str(zotero_db),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert Path(str(out_base) + ".png").exists()
+    assert not Path(str(out_base) + ".pdf").exists()
+
+
+def test_cluster_cmd_invalid_format_rejected(tmp_path, zotero_db, embeddings_db):
+    """--format svg must exit non-zero (invalid format)."""
+    out_base = tmp_path / "bad"
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "cluster",
+            "--top-clusters", "2",
+            "--subcluster-threshold", "99999",
+            "--output", str(out_base),
+            "--format", "svg",
+            "--db-path", str(embeddings_db),
+            "--zotero-db", str(zotero_db),
+        ],
+    )
+    assert result.exit_code != 0
