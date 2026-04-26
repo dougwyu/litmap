@@ -143,62 +143,179 @@ Same as `zotero`: append `(Claude Code only)` to front-matter `description`, add
 
 ### 4.2 Stage 2 rewrite
 
-**Replaces** the current Stage 2 "use the zotero skill for semantic search; fall back to keyword search" paragraph (~15 lines) with the following procedure.
+The existing Stage 2 (~260 lines) has two distinct workflows:
 
-**Procedure:**
+- **Step 0 — `(REFS)` placeholder resolution:** the author marks gaps explicitly with `(REFS)` in the draft; the skill resolves these as the highest-priority gaps using two-tier SQL search (metadata + full-text).
+- **Implicit gap detection:** five-step process for gaps the author didn't mark, using a three-tier search (semantic via litmap as Tier 1, proper-noun keyword as Tier 2, metadata + full-text as a fallback if litmap returns nothing).
 
-1. **Identify unsupported claims.** Unchanged from current behaviour. Scan the manuscript for empirical or theoretical assertions that lack an in-text citation. Build a list of records:
-   ```
-   {claim_text, sentence_context, section_heading}
-   ```
-   where `sentence_context` is the claim's sentence plus the one preceding sentence (for query disambiguation).
+The rewrite **preserves both workflows** and **switches the candidate-search engine to litmap** in both. Specifically:
 
-2. **(Optional, ≥30 unique citations only) — Up-front cluster overview.**
-   ```bash
-   uv run --project ~/src/Cowork/litmap litmap cluster \
-     --manuscript <manuscript_path> \
-     --output /tmp/audit_clusters \
-     --format md
-   ```
-   Skill reads `/tmp/audit_clusters.md` and presents the thematic outline before per-claim analysis. The user can use this to spot whole topic areas that are over- or under-cited in the manuscript.
+- `(REFS)` placeholders stay as Step 0. The detection regex, claim-understanding sub-steps (assertion / evidence type / implied audience / additive vs sole), and output format are kept verbatim from the original. Only the candidate-search procedure changes — replace the two-tier SQL block with a single `litmap search --query` call, plus an optional proper-noun pass for species names / acronyms / methods that may not show up in semantic embedding distance.
+- The implicit-gap workflow keeps its five-step structure (identify → extract context → search → rank → prioritise). Step 3's three-tier search collapses: litmap is the only required engine (Tier 1 of original), with the proper-noun pass kept as a complement (was Tier 2). The metadata + full-text fallback (was Tier 3) is **dropped** — if `litmap` is unavailable, the skill aborts Stage 2 and emits the install message rather than silently degrading.
+- The original output format (relevance levels: **Perfect match / Strong / Moderate / Weak**, with snippet and one-sentence justification per candidate) is **kept**. Similarity score from litmap is exposed alongside the relevance level — they're complementary; relevance assesses *fit to the specific claim*, similarity is the raw embedding distance.
+- A **new optional step** is added: when the manuscript has ≥30 unique citations, run `litmap cluster --manuscript <path>` once at the start of Stage 2 and present the thematic outline before any per-claim analysis. Useful for spotting whole topic areas under-cited or over-cited.
 
-3. **Per-claim semantic search.** For each unsupported-claim record, call:
-   ```bash
-   uv run --project ~/src/Cowork/litmap litmap search \
-     --query "<claim_text>. <sentence_context>" \
-     [--collection "<scope>"] \
-     --top-k 5 --format json
-   ```
-   `--collection` is included only if the user named one ("audit my manuscript against my Chapter 2 refs only").
+The detailed sub-procedure follows.
 
-4. **Filter candidates.**
-   - Drop any candidate already cited in the manuscript (compare DOI first, then `lastname year` against the reference list built in Stage 1).
-   - Drop any candidate with `similarity < 0.75` — below that threshold the match is usually too weak to be useful.
-   - Keep at most 3 candidates per claim.
+#### 4.2.1 Step 0 — Resolve `(REFS)` placeholders first (kept; candidate engine swapped)
 
-5. **Present the report.** For each unsupported claim:
-   ```markdown
-   ### Section 3.2 — claim text excerpt
-   > "<the claim sentence>"
+Detection (verbatim from the original):
 
-   Suggested citations from your library (similarity, zotero_key):
-   1. **0.87** — Valavi et al. 2022, *Predictive performance of presence-only SDMs* (`AAAA0001`)
-      DOI: 10.1111/geb.13476
-   2. **0.81** — Norberg 2019, *A comprehensive evaluation of predictive performance...* (`AAAA0042`)
-   ```
-   If no candidates clear the threshold:
-   > "No semantically similar papers in your library. Consider broader literature search outside the local Zotero collection."
+```bash
+grep -n "REFS" manuscript.txt
+```
+
+Or in Python:
+```python
+import re
+for m in re.finditer(r'\bREFS\b', text):
+    start = text.rfind('\n', 0, m.start()) + 1
+    end = text.find('\n', m.end())
+    print(f"Line {text[:m.start()].count(chr(10))+1}: {text[start:end].strip()}")
+```
+
+For each occurrence, extract **5–10 lines of surrounding context** and identify:
+- The core assertion
+- The type of evidence expected (empirical / review / methodology / grey lit)
+- The implied audience (e.g. assurance, ecology, economics, policy)
+- Additive vs sole
+
+**New candidate-search procedure** (replaces the original two-tier SQL block):
+
+```bash
+uv run --project ~/src/Cowork/litmap litmap search \
+  --query "<claim assertion + 1–2 sentences of context>" \
+  --top-k 8 --format json
+```
+
+Plus an optional proper-noun pass against Zotero metadata for species names / acronyms / methods that semantic search may underweight (using the existing `extract_proper_nouns` regex from the original skill — kept verbatim — and a focused `LIKE` query against `tv.value` and `av.value`). Merge the two result sets, deduping by `zotero_key`; semantic hits sort first by similarity, proper-noun-only hits append after.
+
+Filter and rank candidates (kept verbatim from the original):
+- Does the paper directly support the claim, or only tangentially?
+- Right type of evidence?
+- Already cited elsewhere?
+- Serves the implied audience?
+
+Suggest **3–4 candidates per REFS**, ranked by fit. One-sentence rationale each.
+
+Output format (kept verbatim):
+
+```
+REFS — Line [N]
+Context: "[sentence(s) containing REFS, with surrounding citations if any]"
+Claim: [1-sentence description of what evidence is needed]
+Implied audience: [e.g., assurance/finance/ecology/policy]
+
+Suggested citations:
+1. [Zotero key] Author et al. (year). Title. Journal. DOI.
+   → [1-sentence rationale]
+
+2. [Zotero key] Author et al. (year). Title. Journal. DOI.
+   → [1-sentence rationale]
+
+[If no strong candidates found:]
+No strong candidates found in [library name]. Consider searching [suggested alternative sources].
+```
+
+Deliver REFS resolutions as a dedicated section before the implicit-gap analysis.
+
+#### 4.2.2 Implicit gap detection (kept structure; candidate engine swapped)
+
+**Step A — (Optional, ≥30 unique citations only) Up-front cluster overview.**
+```bash
+uv run --project ~/src/Cowork/litmap litmap cluster \
+  --manuscript <manuscript_path> \
+  --output /tmp/audit_clusters \
+  --format md
+```
+Read `/tmp/audit_clusters.md` and present the thematic outline before per-claim analysis. Useful for spotting topic areas under- or over-cited.
+
+**Step B — Identify unsupported claims** (kept verbatim from original Process step 1):
+- No citation
+- Citation verdict ✗ **Unsupported** or ⚠ **Overstated** (from Stage 1)
+- A citation to a paper that exists in Zotero but lacks the supporting passage
+
+**Step C — Extract claim context** (kept verbatim from original Process step 2):
+- Claim text (1–2 sentences)
+- Section heading
+- Key concepts (nouns, verbs, relationships)
+
+**Step D — Search for candidates (litmap + proper-noun pass).**
+
+Litmap query:
+```bash
+uv run --project ~/src/Cowork/litmap litmap search \
+  --query "<claim_text>. <sentence_context>" \
+  [--collection "<scope>"] \
+  --top-k 5 --format json
+```
+
+`--collection` is included only if the user named one (e.g. "audit against my Chapter 2 refs only").
+
+Proper-noun pass: extract capitalised phrases / acronyms / species names from the claim using the original `extract_proper_nouns` regex (kept verbatim) and run a SQL `LIKE` query against `itemDataValues` for title and abstract. Merge with litmap results, dedupe by `zotero_key`.
+
+If litmap returns no candidates above the **0.75 similarity threshold**, *and* the proper-noun pass also returns nothing, the per-claim entry says "no semantically similar papers in your library; consider broader literature search."
+
+**Step E — Rank and suggest** (kept verbatim from original Process step 4):
+- Check if the result's abstract/title matches the claim
+- Assign relevance: **Perfect match / Strong / Moderate / Weak**
+- Extract a brief snippet from the paper that supports the claim
+- Write a 1-sentence justification
+
+**Step F — Prioritise suggestions** (kept verbatim from original Process step 5):
+- Up to 2 papers for claims with no citation
+- 1 replacement paper if the current citation is unsupported
+- 1–2 supplementary papers if the citation is weak or too narrow
+
+**Filter overlap with existing citations:** drop any candidate already cited in the manuscript (compare DOI first, then `lastname year` against the Stage 1 reference list).
+
+**Output format** (kept verbatim from original):
+
+```
+[Claim Location] Results section, paragraph 3
+
+Unsupported claim: "Deep learning models outperform traditional SDMs
+in predicting species distributions."
+
+**Suggested citations:**
+
+1. **Max et al. 2022** — "Deep learning for species distribution modeling:
+A benchmark study"
+   Relevance: Perfect match  (similarity 0.91)
+   Snippet: "Deep neural networks achieved 12% higher AUC than MaxEnt
+   models on average across 500 species."
+   Justification: Directly compares deep learning to traditional SDMs with
+   quantitative results.
+
+2. **Brown & Kim 2021** — "Machine learning in biodiversity prediction"
+   Relevance: Strong  (similarity 0.78)
+   Snippet: "Recent advances in neural networks have improved predictive
+   accuracy for spatial distribution models."
+   Justification: Broader review of ML in SDMs; supports the claim but
+   is less specific than Max et al. 2022.
+```
+
+Note the addition of `(similarity X.XX)` next to the relevance level — the only material change to the output format.
 
 ### 4.3 Stage 2 failure modes
 
-- **Cluster step fails** (e.g., < 2 cited papers found in Zotero): skip silently, proceed to per-claim search.
-- **litmap unavailable**: emit the same install message as the zotero skill, and abort Stage 2 (do not silently fall back to keyword search — the user explicitly requested a semantic audit).
-- **Manuscript scope mismatch**: if the user passed `--collection X` but X has fewer than 5 papers, warn that the scoped search is likely too narrow and offer to broaden.
+- **Cluster step (Step A) fails** (e.g., < 2 cited papers found in Zotero or `litmap cluster` errors): skip silently, proceed to per-claim search.
+- **`litmap` unavailable** (command not found, model fails to load, embeddings DB missing): emit the install/sync message ("Run `uv pip install -e .` from `~/src/Cowork/litmap`" or "Run `litmap sync` first") and abort Stage 2. **Do not silently fall back to keyword/full-text-only search** — the user explicitly requested a semantic audit, and a degraded fallback would be misleading.
+- **Manuscript `--collection` scope mismatch**: if `--collection X` was passed but X has fewer than 5 papers, warn the user and offer to broaden.
 
 ### 4.4 What's removed
 
-- The existing "Stage 2 keyword fallback" paragraph (`if litmap not available, use full-text index ...`) — gone, replaced by the unavailability error in §4.3.
-- Any prior text saying "results may be approximate" — Stage 2 is now first-class.
+- The original "Tier 3 — Metadata + full-text fallback" inside the implicit-gap Step 3 — dropped. With litmap mandatory, the fallback is unnecessary and would degrade silently.
+- Any prior text suggesting "fall back to keyword search if litmap unavailable" — replaced by the abort-with-install-message in §4.3.
+
+### 4.5 What's kept verbatim from the original
+
+To make the diff explicit:
+
+- Step 0 detection regex, context-extraction rule, claim-understanding sub-questions, candidate-filtering criteria, suggestion count (3–4 per REFS), `Output format for REFS resolution` block.
+- Implicit-gap Steps B (identify unsupported claims), C (extract claim context), E (rank with relevance levels), F (prioritise).
+- The `extract_proper_nouns` regex helper.
+- The relevance levels (**Perfect match / Strong / Moderate / Weak**), snippet rule, justification rule, and the implicit-gap output template.
 
 ---
 
@@ -213,9 +330,11 @@ Skills don't have a unit-test harness, but we verify behaviour by invoking the r
 | `zotero` skill: "organise My Papers into themes" | Skill calls Tier 4c, presents Markdown outline of 2+ clusters. |
 | `zotero` skill: "Find papers by Valavi 2022" | Skill stays in Tier 1 (no litmap call). |
 | `zotero` skill: invoked with `litmap` uninstalled | Skill emits install instructions, does not crash. |
-| `manuscript-audit` Stage 2 with a manuscript containing 3 unsupported claims | Each claim gets up to 3 suggested citations from the library, all with similarity ≥ 0.75 or "no matches" message. |
+| `manuscript-audit` Stage 2 with a manuscript containing 3 unsupported claims | Each claim gets up to 3 suggested citations from the library, with relevance level + similarity score, or "no matches" message. |
+| `manuscript-audit` Stage 2 with a manuscript containing `(REFS)` placeholders | Step 0 fires, REFS placeholders resolved as a dedicated section before implicit-gap analysis, candidates fetched via `litmap search` (not metadata SQL). |
 | `manuscript-audit` Stage 2 with 40-citation manuscript | Cluster overview appears before per-claim analysis. |
 | `manuscript-audit` Stage 2 with 5-citation manuscript | No cluster overview (under threshold). |
+| `manuscript-audit` Stage 2 with `litmap` unavailable | Stage 2 aborts with install message; does NOT silently fall back to metadata/full-text search. |
 
 ---
 
@@ -233,3 +352,4 @@ Skills don't have a unit-test harness, but we verify behaviour by invoking the r
 - **Similarity threshold (0.75) is a guess.** First real run against the user's library may show that 0.7 or 0.8 is a better default. The threshold is exposed as a single constant in the skill text — easy to tune later.
 - **`--paper` accepts DOI or title.** The skill prefers DOI when the user provides one; for ambiguous titles it falls back to litmap's built-in close-match suggestions.
 - **Stage 1 retraction check** is unaffected by this update — it stays in `manuscript-audit` as already specified.
+- **Proper-noun pass complementing litmap.** The original skill's `extract_proper_nouns` regex catches species names, acronyms, and method names that semantic embeddings sometimes underweight. We keep it as a complement to `litmap search`, not a fallback. If after a few real audits the proper-noun pass never adds anything litmap missed, drop it.
