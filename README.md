@@ -11,7 +11,8 @@ Everything runs locally — no background daemon, no network calls after the fir
 - **`litmap map`** — UMAP scatter plot of papers with k-nearest-neighbour edges, coloured by semantic position. Outputs interactive Plotly HTML and publication-quality PNG/PDF (300 DPI).
 - **`litmap search`** — Cosine similarity search over your Zotero library for a query sentence, passage, or focal paper. Outputs a ranked table or JSON.
 - **`litmap cluster`** — Hierarchical semantic clustering (≤2 levels) of a collection, bibliography, or the whole library. Outputs an interactive dendrogram (HTML), static dendrograms (PNG/PDF), a labelled outline (Markdown + JSON), and a `.linkage.npy` cache for downstream analyses.
-- **`litmap sync`** — Manually trigger embedding of all Zotero items.
+- **`litmap sync`** — Manually trigger embedding of all Zotero items (title + abstract).
+- **`litmap sync-fulltext`** — Embed full PDF text for all items with a local PDF attachment. Vectors are stored separately and automatically preferred over title+abstract embeddings in all commands. Safe to interrupt and resume.
 - **Auto-sync** — Every command automatically embeds any Zotero items not yet in the cache before running. A `tqdm` progress bar appears during sync; silent if already up to date.
 - **Four map modes** — collection only, manuscript bibliography only, intersection, or full union.
 - **Manuscript node** — When `--manuscript` is provided, your paper appears as a red star in the map, positioned semantically among its cited works.
@@ -118,13 +119,31 @@ Writes `<output>.html` (interactive dendrogram), `.pdf` + `.png` (static 300 DPI
 
 ### `litmap sync`
 
-Force re-sync of all Zotero items (normally runs automatically).
+Force re-sync of all Zotero items (title + abstract) into the embeddings cache. Normally runs automatically before every command.
+
+### `litmap sync-fulltext`
+
+```
+Options:
+      --max-tokens INT   Max tokens per chunk [default: 3000; up to 8000]
+      --force            Re-embed even already-processed PDFs
+```
+
+Embeds the full text of every Zotero item that has a local PDF attachment. Text is extracted with PyMuPDF, split into non-overlapping chunks of `--max-tokens` tokens, encoded one chunk at a time (to avoid GPU OOM), and averaged into a single L2-normalised vector per paper. Vectors are stored in a separate `fulltext_embeddings` table and automatically preferred over title+abstract embeddings in `search`, `map`, and `cluster`. Papers without a local PDF fall back to title+abstract silently.
+
+The job is safe to interrupt and resume — already-embedded papers are skipped unless `--force` is passed. To re-embed everything at a new token limit:
+
+```bash
+litmap sync-fulltext --max-tokens 3000 --force
+```
+
+Approximate throughput on Apple Silicon (MPS): ~30–60 s/paper at 3000 tokens.
 
 ---
 
 ## Storage
 
-Embeddings are stored in `~/LitLake/embeddings.db` (SQLite, ~1 KB per paper). The directory is created automatically on first run.
+`~/LitLake/embeddings.db` (SQLite) holds two tables: `embeddings` (title + abstract, ~3 KB/paper) and `fulltext_embeddings` (full text, ~3 KB/paper). The directory is created automatically on first run. Running both syncs on a library of ~16 000 papers with PDFs produces a database of roughly 100–150 MB.
 
 ---
 
@@ -140,7 +159,7 @@ litmap/
 ├── renderer.py    Plotly HTML + matplotlib PNG/PDF (for `map`)
 ├── cluster.py     Hierarchical clustering, TF-IDF labelling, outline
 ├── cluster_render.py  Dendrograms (Plotly HTML + matplotlib) + outline renderers
-└── cli.py         Typer CLI — map, search, cluster, sync
+└── cli.py         Typer CLI — map, search, cluster, sync, sync-fulltext
 ```
 
 ---
@@ -148,7 +167,7 @@ litmap/
 ## Credits
 
 - **[lit-lake](https://github.com/ElliotRoe/lit-lake)** by Elliot Roe — the original inspiration for this project. `litmap` replicates lit-lake's core embedding and search functionality as an auditable, dependency-light Python package, without the `.mcpb` installer or background daemon.
-- **[Claude](https://claude.ai)** (Anthropic) — this codebase was designed and implemented in a single session using Claude Code with the [Superpowers](https://github.com/superpowers) skill system for structured TDD and subagent-driven development.
+- **[Claude](https://claude.ai)** (Anthropic) — this codebase was designed and implemented using Claude (Cowork mode), including full-text PDF embedding, chunked encoding, and MPS memory management.
 - **[sentence-transformers](https://www.sbert.net/)** + **[Alibaba-NLP/gte-modernbert-base](https://huggingface.co/Alibaba-NLP/gte-modernbert-base)** — local embedding inference; 768-dim GTE-ModernBERT (149M params, 8192-token context) with Metal GPU acceleration on Apple Silicon.
 - **[UMAP](https://github.com/lmcinnes/umap)** — dimensionality reduction for the semantic layout.
 
