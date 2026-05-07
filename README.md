@@ -137,7 +137,17 @@ The job is safe to interrupt and resume — already-embedded papers are skipped 
 litmap sync-fulltext --max-tokens 3000 --force
 ```
 
-Approximate throughput on Apple Silicon (MPS): ~30–60 s/paper at 3000 tokens.
+Approximate throughput on Apple Silicon (MPS) on a MacBook Air M4: ~12 s/paper at 3000 tokens, ~100 s/paper at 8000 tokens. Encoding time scales roughly as O(n²) in token count because transformer attention computes interactions between every pair of tokens — doubling the sequence length roughly quadruples the compute. This makes 8000-token encoding disproportionately expensive; 3000 tokens is recommended.
+
+**Choosing `--max-tokens`**
+
+Token count maps roughly to 0.75 words, so 1000 tokens ≈ 750 words.
+
+- **2000 tokens (~1500 words)** — full abstract and introduction. Captures topic framing and research questions; good for subject-area similarity.
+- **3000 tokens (~2250 words)** — full abstract, introduction, and most of the methods. Adds methodological signal; recommended default.
+- **8000 tokens (~6000 words)** — abstract through most of the results. Near-complete coverage for typical journal articles, but ~8× slower per paper due to quadratic attention scaling, and risks GPU OOM on machines with limited memory.
+
+Papers shorter than `--max-tokens` are encoded in full regardless of the setting. For mixed libraries where speed matters, 3000 tokens is a good balance.
 
 ---
 
