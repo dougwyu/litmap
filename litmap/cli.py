@@ -222,6 +222,7 @@ def sync_cmd(
 @app.command("sync-fulltext")
 def sync_fulltext_cmd(
     force: bool = typer.Option(False, "--force", help="Re-embed even already-processed PDFs"),
+    max_tokens: int = typer.Option(3000, "--max-tokens", help="Max tokens per chunk (default 3000; up to 8000)"),
     db_path: Path = typer.Option(_DEFAULT_DB, hidden=True),
     zotero_db: Path = typer.Option(_DEFAULT_ZOTERO, hidden=True),
 ):
@@ -233,7 +234,7 @@ def sync_fulltext_cmd(
     """
     from litmap.embedder import sync_fulltext, init_db
     init_db(db_path)
-    n_embedded, n_no_pdf = sync_fulltext(db_path, zotero_db, force=force)
+    n_embedded, n_no_pdf = sync_fulltext(db_path, zotero_db, force=force, max_tokens=max_tokens)
     typer.echo(f"Embedded {n_embedded} PDFs. ({n_no_pdf} items had no local PDF and were skipped.)")
 
 

@@ -169,10 +169,10 @@ def _truncate_to_tokens(text: str, max_tokens: int = _MAX_TOKENS) -> tuple[str, 
     return truncated_text, max_tokens
 
 
-def _embed_fulltext_single(item: Item) -> Optional[tuple[np.ndarray, int, int]]:
+def _embed_fulltext_single(item: Item, max_tokens: int = _MAX_TOKENS) -> Optional[tuple[np.ndarray, int, int]]:
     """Extract, chunk, embed and average a single paper's full text.
 
-    Strategy: split into non-overlapping chunks of _MAX_TOKENS tokens,
+    Strategy: split into non-overlapping chunks of max_tokens tokens,
     embed each chunk, then return the L2-normalised mean vector.
     Returns (vector, n_tokens, n_chunks) or None if no text extracted.
     """
@@ -192,8 +192,8 @@ def _embed_fulltext_single(item: Item) -> Optional[tuple[np.ndarray, int, int]]:
 
     # Split into chunks
     chunk_ids = [
-        all_tokens[start:start + _MAX_TOKENS]
-        for start in range(0, n_tokens, _MAX_TOKENS)
+        all_tokens[start:start + max_tokens]
+        for start in range(0, n_tokens, max_tokens)
     ]
     chunk_texts = [
         tokenizer.decode(chunk, skip_special_tokens=True)
@@ -262,6 +262,7 @@ def sync_fulltext(
     db_path: Path = EMBEDDINGS_DB,
     zotero_db: Path = ZOTERO_DB,
     force: bool = False,
+    max_tokens: int = _MAX_TOKENS,
 ) -> tuple[int, int]:
     """Embed full PDF text for all Zotero items that have a local PDF.
 
@@ -287,7 +288,7 @@ def sync_fulltext(
     with tqdm(total=len(items_with_pdf), desc="Embedding full-text PDFs", unit="paper") as bar:
         for item in items_with_pdf:
             bar.set_postfix({"file": item.pdf_path.name[:40] if item.pdf_path else ""})
-            result = _embed_fulltext_single(item)
+            result = _embed_fulltext_single(item, max_tokens=max_tokens)
             if result is not None:
                 vec, n_tokens, n_chunks = result
                 conn.execute(
