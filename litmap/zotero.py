@@ -18,6 +18,7 @@ class Item:
     authors: list[str]
     year: str
     doi: str
+    pdf_path: Optional[Path] = None
 
 
 def _connect(db_path: Path) -> sqlite3.Connection:
@@ -41,10 +42,22 @@ def _author_type_id(conn: sqlite3.Connection) -> int:
     return row["creatorTypeID"] if row else 1
 
 
-def _rows_to_items(rows) -> list[Item]:
+def _rows_to_items(rows, zotero_base: Optional[Path] = None) -> list[Item]:
     items = []
     for r in rows:
         authors = [a.strip() for a in (r["authors"] or "").split(";") if a.strip()]
+        # Resolve PDF path from storage:filename pattern
+        pdf_path: Optional[Path] = None
+        raw_path = dict(r).get("pdf_path") or ""
+        if raw_path and zotero_base is not None:
+            if raw_path.startswith("storage:"):
+                filename = raw_path[len("storage:"):]
+                # Zotero stores attachments in storage/<8-char-key>/<filename>
+                # We use the attachment key stored alongside
+                att_key = dict(r).get("att_key") or ""
+                candidate = zotero_base / "storage" / att_key / filename
+                if candidate.exists():
+                    pdf_path = candidate
         items.append(Item(
             key=r["key"],
             title=r["title"] or "",
@@ -52,6 +65,7 @@ def _rows_to_items(rows) -> list[Item]:
             authors=authors,
             year=(r["year"] or "")[:4],
             doi=r["doi"] or "",
+            pdf_path=pdf_path,
         ))
     return items
 
@@ -63,7 +77,9 @@ _ITEM_SELECT = """
         av.value  AS abstract,
         GROUP_CONCAT(c.lastName || ', ' || c.firstName, '; ') AS authors,
         dv.value  AS year,
-        doiv.value AS doi
+        doiv.value AS doi,
+        att.path  AS pdf_path,
+        atti.key  AS att_key
     FROM items i
     LEFT JOIN itemData    td   ON td.itemID   = i.itemID AND td.fieldID   = :title_id
     LEFT JOIN itemDataValues tv ON tv.valueID = td.valueID
@@ -75,12 +91,20 @@ _ITEM_SELECT = """
     LEFT JOIN itemDataValues doiv ON doiv.valueID = doid.valueID
     LEFT JOIN itemCreators ic ON ic.itemID = i.itemID AND ic.creatorTypeID = :author_type
     LEFT JOIN creators c ON c.creatorID = ic.creatorID
+    LEFT JOIN (
+        SELECT parentItemID, MIN(itemID) AS itemID, path
+        FROM itemAttachments
+        WHERE contentType = 'application/pdf'
+        GROUP BY parentItemID
+    ) att ON att.parentItemID = i.itemID
+    LEFT JOIN items atti ON atti.itemID = att.itemID
     WHERE i.itemTypeID NOT IN """ + _EXCLUDED_TYPES_SQL + """
       AND tv.value IS NOT NULL
 """
 
 
 def get_all_items(db_path: Path = ZOTERO_DB) -> list[Item]:
+    zotero_base = db_path.parent
     with _connect(db_path) as conn:
         fids = _field_ids(conn)
         atid = _author_type_id(conn)
@@ -90,10 +114,11 @@ def get_all_items(db_path: Path = ZOTERO_DB) -> list[Item]:
              "date_id": fids["date"], "doi_id": fids["DOI"],
              "author_type": atid},
         ).fetchall()
-    return _rows_to_items(rows)
+    return _rows_to_items(rows, zotero_base)
 
 
 def get_collection(name: str, db_path: Path = ZOTERO_DB) -> list[Item]:
+    zotero_base = db_path.parent
     with _connect(db_path) as conn:
         fids = _field_ids(conn)
         atid = _author_type_id(conn)
@@ -110,10 +135,11 @@ def get_collection(name: str, db_path: Path = ZOTERO_DB) -> list[Item]:
              "date_id": fids["date"], "doi_id": fids["DOI"],
              "author_type": atid, "name": name},
         ).fetchall()
-    return _rows_to_items(rows)
+    return _rows_to_items(rows, zotero_base)
 
 
 def get_item(key_or_doi: str, db_path: Path = ZOTERO_DB) -> Optional[Item]:
+    zotero_base = db_path.parent
     with _connect(db_path) as conn:
         fids = _field_ids(conn)
         atid = _author_type_id(conn)
@@ -127,7 +153,7 @@ def get_item(key_or_doi: str, db_path: Path = ZOTERO_DB) -> Optional[Item]:
              "date_id": fids["date"], "doi_id": fids["DOI"],
              "author_type": atid, "val": key_or_doi},
         ).fetchall()
-    items = _rows_to_items(rows)
+    items = _rows_to_items(rows, zotero_base)
     return items[0] if items else None
 
 

@@ -32,7 +32,7 @@ def map_cmd(
     """Generate a 2D semantic map of papers."""
     from litmap.zotero import get_collection, get_all_items
     from litmap.manuscript import parse_bibliography, extract_manuscript_text, match_items_to_zotero
-    from litmap.embedder import embed_text, load_all_embeddings, init_db
+    from litmap.embedder import embed_text, load_all_fulltext_embeddings as load_all_embeddings, init_db
     from litmap.layout import compute_layout, build_graph
     from litmap.renderer import render_html, render_static
     import numpy as np
@@ -219,6 +219,24 @@ def sync_cmd(
         typer.echo(f"Embedded {count} new papers.")
 
 
+@app.command("sync-fulltext")
+def sync_fulltext_cmd(
+    force: bool = typer.Option(False, "--force", help="Re-embed even already-processed PDFs"),
+    db_path: Path = typer.Option(_DEFAULT_DB, hidden=True),
+    zotero_db: Path = typer.Option(_DEFAULT_ZOTERO, hidden=True),
+):
+    """Embed full PDF text for all Zotero items with a local PDF attachment.
+
+    Vectors are stored in the fulltext_embeddings table and automatically
+    preferred over title+abstract embeddings in search, map, and cluster.
+    Safe to interrupt and resume — already-embedded papers are skipped.
+    """
+    from litmap.embedder import sync_fulltext, init_db
+    init_db(db_path)
+    n_embedded, n_no_pdf = sync_fulltext(db_path, zotero_db, force=force)
+    typer.echo(f"Embedded {n_embedded} PDFs. ({n_no_pdf} items had no local PDF and were skipped.)")
+
+
 @app.command("cluster")
 def cluster_cmd(
     collection: Optional[str] = typer.Option(None, "--collection", "-c", help="Zotero collection name"),
@@ -239,7 +257,7 @@ def cluster_cmd(
 
     from litmap.zotero import get_collection, get_all_items, get_subcollection_map
     from litmap.manuscript import parse_bibliography, match_items_to_zotero
-    from litmap.embedder import load_all_embeddings
+    from litmap.embedder import load_all_fulltext_embeddings as load_all_embeddings
     from litmap.cluster import compute_hierarchy, cut_levels, label_clusters, build_outline
     from litmap.cluster_render import (
         render_dendrogram_html, render_dendrogram_static,

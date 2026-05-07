@@ -5,7 +5,7 @@ from typing import Optional
 
 import numpy as np
 
-from litmap.embedder import load_all_embeddings, EMBEDDINGS_DB
+from litmap.embedder import load_all_embeddings, load_all_fulltext_embeddings, EMBEDDINGS_DB
 
 
 def find_similar(
@@ -19,7 +19,7 @@ def find_similar(
 
     Each result: {"key": str, "similarity": float}
     """
-    matrix, keys = load_all_embeddings(db_path, scope_keys)
+    matrix, keys = load_all_fulltext_embeddings(db_path, scope_keys)
     if len(keys) == 0:
         return []
 
