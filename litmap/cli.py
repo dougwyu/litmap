@@ -259,12 +259,13 @@ def info_cmd(
 
 @app.command("sync")
 def sync_cmd(
+    force: bool = typer.Option(False, "--force", help="Re-embed all papers, even those already in the cache"),
     db_path: Path = typer.Option(_DEFAULT_DB, hidden=True),
     zotero_db: Path = typer.Option(_DEFAULT_ZOTERO, hidden=True),
 ):
-    """Force re-sync of all Zotero items into embeddings DB."""
+    """Sync Zotero items into embeddings DB. Use --force to regenerate all embeddings."""
     from litmap.embedder import sync
-    count = sync(db_path, zotero_db)
+    count = sync(db_path, zotero_db, force=force)
     if count == 0:
         typer.echo("Already up to date.")
     else:

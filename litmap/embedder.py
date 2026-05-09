@@ -103,15 +103,19 @@ def load_all_embeddings(
 def sync(
     db_path: Path = EMBEDDINGS_DB,
     zotero_db: Path = ZOTERO_DB,
+    force: bool = False,
 ) -> int:
     init_db(db_path)
     all_items = get_all_items(zotero_db)
-    existing_keys = _existing_keys(db_path)
-    new_items = [i for i in all_items if i.key not in existing_keys]
-    if not new_items:
+    if force:
+        items_to_embed = all_items
+    else:
+        existing_keys = _existing_keys(db_path)
+        items_to_embed = [i for i in all_items if i.key not in existing_keys]
+    if not items_to_embed:
         return 0
-    _embed_and_store(new_items, db_path)
-    return len(new_items)
+    _embed_and_store(items_to_embed, db_path)
+    return len(items_to_embed)
 
 
 def _existing_keys(db_path: Path) -> set[str]:
