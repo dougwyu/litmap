@@ -18,6 +18,7 @@ class Item:
     authors: list[str]
     year: str
     doi: str
+    keywords: str = ""
     pdf_path: Optional[Path] = None
 
 
@@ -30,7 +31,7 @@ def _connect(db_path: Path) -> sqlite3.Connection:
 def _field_ids(conn: sqlite3.Connection) -> dict[str, int]:
     rows = conn.execute(
         "SELECT fieldName, fieldID FROM fields "
-        "WHERE fieldName IN ('title','abstractNote','date','DOI')"
+        "WHERE fieldName IN ('title','abstractNote','date','DOI','keywords')"
     ).fetchall()
     return {r["fieldName"]: r["fieldID"] for r in rows}
 
@@ -65,6 +66,7 @@ def _rows_to_items(rows, zotero_base: Optional[Path] = None) -> list[Item]:
             authors=authors,
             year=(r["year"] or "")[:4],
             doi=r["doi"] or "",
+            keywords=r["keywords"] or "",
             pdf_path=pdf_path,
         ))
     return items
@@ -78,6 +80,7 @@ _ITEM_SELECT = """
         GROUP_CONCAT(c.lastName || ', ' || c.firstName, '; ') AS authors,
         dv.value  AS year,
         doiv.value AS doi,
+        kv.value  AS keywords,
         att.path  AS pdf_path,
         atti.key  AS att_key
     FROM items i
@@ -89,6 +92,8 @@ _ITEM_SELECT = """
     LEFT JOIN itemDataValues dv ON dv.valueID = dd.valueID
     LEFT JOIN itemData    doid ON doid.itemID = i.itemID AND doid.fieldID = :doi_id
     LEFT JOIN itemDataValues doiv ON doiv.valueID = doid.valueID
+    LEFT JOIN itemData    kd   ON kd.itemID   = i.itemID AND kd.fieldID   = :keywords_id
+    LEFT JOIN itemDataValues kv ON kv.valueID = kd.valueID
     LEFT JOIN itemCreators ic ON ic.itemID = i.itemID AND ic.creatorTypeID = :author_type
     LEFT JOIN creators c ON c.creatorID = ic.creatorID
     LEFT JOIN (
@@ -112,6 +117,7 @@ def get_all_items(db_path: Path = ZOTERO_DB) -> list[Item]:
             _ITEM_SELECT + " GROUP BY i.itemID",
             {"title_id": fids["title"], "abs_id": fids["abstractNote"],
              "date_id": fids["date"], "doi_id": fids["DOI"],
+             "keywords_id": fids.get("keywords"),
              "author_type": atid},
         ).fetchall()
     return _rows_to_items(rows, zotero_base)
@@ -133,6 +139,7 @@ def get_collection(name: str, db_path: Path = ZOTERO_DB) -> list[Item]:
             """,
             {"title_id": fids["title"], "abs_id": fids["abstractNote"],
              "date_id": fids["date"], "doi_id": fids["DOI"],
+             "keywords_id": fids.get("keywords"),
              "author_type": atid, "name": name},
         ).fetchall()
     return _rows_to_items(rows, zotero_base)
@@ -151,6 +158,7 @@ def get_item(key_or_doi: str, db_path: Path = ZOTERO_DB) -> Optional[Item]:
             """,
             {"title_id": fids["title"], "abs_id": fids["abstractNote"],
              "date_id": fids["date"], "doi_id": fids["DOI"],
+             "keywords_id": fids.get("keywords"),
              "author_type": atid, "val": key_or_doi},
         ).fetchall()
     items = _rows_to_items(rows, zotero_base)

@@ -123,7 +123,7 @@ def _existing_keys(db_path: Path) -> set[str]:
 
 def _embed_and_store(items: list[Item], db_path: Path) -> None:
     model = _get_model()
-    texts = [f"{i.title} {i.abstract}".strip() for i in items]
+    texts = [f"{i.title} {i.abstract} {i.keywords}".strip() for i in items]
     conn = sqlite3.connect(db_path)
     now = datetime.now(timezone.utc).isoformat()
     with tqdm(total=len(items), desc="Syncing new papers", unit="paper") as bar:
