@@ -205,6 +205,58 @@ def search_cmd(
             typer.echo(f"     {authors} {r['year']}  {r['doi']}")
 
 
+@app.command("info")
+def info_cmd(
+    paper: str = typer.Argument(help="Title fragment, DOI, or Zotero key"),
+    db_path: Path = typer.Option(_DEFAULT_DB, hidden=True),
+    zotero_db: Path = typer.Option(_DEFAULT_ZOTERO, hidden=True),
+):
+    """Show embedding status for a paper."""
+    import sqlite3
+    from litmap.zotero import get_item, get_all_items
+    from difflib import get_close_matches
+
+    # Try exact match first (key or DOI)
+    item = get_item(paper, zotero_db)
+
+    # Fall back to fuzzy title match
+    if item is None:
+        all_items = get_all_items(zotero_db)
+        titles = [i.title for i in all_items]
+        matches = get_close_matches(paper, titles, n=1, cutoff=0.3)
+        if matches:
+            item = next(i for i in all_items if i.title == matches[0])
+
+    if item is None:
+        typer.echo(f"No paper found matching: {paper!r}", err=True)
+        raise typer.Exit(1)
+
+    typer.echo(f"Title:      {item.title}")
+    typer.echo(f"Authors:    {', '.join(item.authors[:3])}{' et al.' if len(item.authors) > 3 else ''}")
+    typer.echo(f"Year:       {item.year}")
+    typer.echo(f"DOI:        {item.doi or '—'}")
+    typer.echo(f"Zotero key: {item.key}")
+    typer.echo(f"PDF:        {item.pdf_path or '—'}")
+
+    conn = sqlite3.connect(db_path)
+
+    row = conn.execute(
+        "SELECT embedded_at FROM embeddings WHERE zotero_key = ?", (item.key,)
+    ).fetchone()
+    typer.echo(f"\nTitle+abstract embedded: {'yes, ' + row[0][:10] if row else 'no'}")
+
+    row = conn.execute(
+        "SELECT n_tokens, n_chunks, embedded_at FROM fulltext_embeddings WHERE zotero_key = ?",
+        (item.key,)
+    ).fetchone()
+    if row:
+        typer.echo(f"Full-text embedded:      yes, {row[2][:10]} ({row[0]} tokens, {row[1]} chunk{'s' if row[1] != 1 else ''})")
+    else:
+        typer.echo("Full-text embedded:      no")
+
+    conn.close()
+
+
 @app.command("sync")
 def sync_cmd(
     db_path: Path = typer.Option(_DEFAULT_DB, hidden=True),

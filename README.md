@@ -117,6 +117,16 @@ Options:
 
 Writes `<output>.html` (interactive dendrogram), `.pdf` + `.png` (static 300 DPI), `.md` + `.json` (labelled outline), and `.linkage.npy` (scipy linkage cache). If neither `--collection` nor `--manuscript` is given, the entire library is clustered. Level-1 cluster count defaults to `max(2, round(√(N/2)))`; any level-1 cluster with at least `--subcluster-threshold` papers is split into sub-clusters. Cluster labels are TF-IDF keyword triplets over title + abstract.
 
+### `litmap info <paper>`
+
+Show embedding status for a single paper. Accepts a title fragment, DOI, or Zotero key. Reports whether the paper has a title+abstract embedding, a full-text embedding, and if so how many tokens and chunks were used.
+
+```bash
+litmap info "Chung 2026"
+litmap info 10.1038/s41586-024-12345-6
+litmap info ABC12DEF
+```
+
 ### `litmap sync`
 
 Force re-sync of all Zotero items (title + abstract) into the embeddings cache. Normally runs automatically before every command.
