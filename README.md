@@ -140,15 +140,20 @@ Force re-sync of all Zotero items (title + abstract) into the embeddings cache. 
 
 ```
 Options:
+  -c, --collection TEXT  Scope to a Zotero collection
       --max-tokens INT   Max tokens per chunk [default: 3000; up to 8000]
       --force            Re-embed even already-processed PDFs
 ```
 
 Embeds the full text of every Zotero item that has a local PDF attachment. Text is extracted with PyMuPDF, split into non-overlapping chunks of `--max-tokens` tokens, encoded one chunk at a time (to avoid GPU OOM), and averaged into a single L2-normalised vector per paper. Vectors are stored in a separate `fulltext_embeddings` table and automatically preferred over title+abstract embeddings in `search`, `map`, and `cluster`. Papers without a local PDF fall back to title+abstract silently.
 
-The job is safe to interrupt and resume — already-embedded papers are skipped unless `--force` is passed. To re-embed everything at a new token limit:
+The job is safe to interrupt and resume — already-embedded papers are skipped unless `--force` is passed. Use `--collection` to scope the run to a single Zotero collection, which is useful for testing higher token counts on a smaller set before committing to a full-library run.
 
 ```bash
+# Embed a single collection at higher quality
+litmap sync-fulltext --collection "NatureMAP" --max-tokens 6000
+
+# Re-embed everything at a new token limit
 litmap sync-fulltext --max-tokens 3000 --force
 ```
 
