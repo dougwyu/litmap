@@ -86,7 +86,7 @@ Options:
   -m, --manuscript PATH          Manuscript file (PDF, DOCX, .bib, .tex)
       --union                    Use collection ∪ manuscript bibliography
   -o, --output PATH              Output base path [default: litmap_output]
-      --n-neighbors INT          UMAP n_neighbors [default: 15]
+      --n-neighbors INT          UMAP n_neighbors [default: 3]
       --edge-k INT               k-NN edges per node [default: 3]
   -f, --format TEXT              html | png | pdf | all [default: all]
       --label-clusters           Annotate HDBSCAN clusters with TF-IDF keywords [default: on]
@@ -172,19 +172,41 @@ Papers shorter than `--max-tokens` are encoded in full regardless of the setting
 
 ---
 
+## Scripts
+
+### `scripts/manuscript_to_bib.py`
+
+Export a BibTeX file of all papers cited in a manuscript, matched against your Zotero library.
+
+```bash
+uv run scripts/manuscript_to_bib.py manuscript.docx refs.bib
+uv run scripts/manuscript_to_bib.py manuscript.docx refs.bib --zotero-db ~/Zotero/zotero.sqlite
+```
+
+Works with two document types:
+
+- **Word documents with live Zotero field codes** — citations inserted via the Zotero Word or Google Docs plugin, not yet unlinked. Keys are extracted directly and matched exactly.
+- **Google Docs exports (Download as .docx)** — field codes are stripped on export, so the script falls back to extracting `https://doi.org/` links from the Zotero-generated bibliography and matching them against Zotero by DOI. Requires the document to contain a Zotero bibliography.
+
+The script tries field codes first and falls back to DOI extraction automatically. Output is a `.bib` file importable via Zotero **File → Import**. Errors if the output file already exists.
+
+---
+
 ## Architecture
 
 ```
 litmap/
-├── zotero.py      Read-only access to ~/Zotero/zotero.sqlite
-├── embedder.py    sentence-transformers model + ~/LitLake/embeddings.db cache
-├── layout.py      UMAP 2D layout + scikit-learn k-NN graph
-├── search.py      Cosine similarity search + proper noun extraction
-├── manuscript.py  Bibliography parser (PDF/DOCX/BibTeX/LaTeX)
-├── renderer.py    Plotly HTML + matplotlib PNG/PDF (for `map`)
-├── cluster.py     Hierarchical clustering, TF-IDF labelling, outline
+├── zotero.py          Read-only access to ~/Zotero/zotero.sqlite
+├── embedder.py        sentence-transformers model + ~/LitLake/embeddings.db cache
+├── layout.py          UMAP 2D layout + HDBSCAN cluster labels + k-NN graph
+├── search.py          Cosine similarity search + proper noun extraction
+├── manuscript.py      Bibliography parser (PDF/DOCX/BibTeX/LaTeX)
+├── renderer.py        Plotly HTML + matplotlib PNG/PDF (for `map`)
+├── cluster.py         Hierarchical clustering, TF-IDF labelling, outline
 ├── cluster_render.py  Dendrograms (Plotly HTML + matplotlib) + outline renderers
-└── cli.py         Typer CLI — map, search, cluster, sync, sync-fulltext
+├── cli.py             Typer CLI — map, search, cluster, sync, sync-fulltext, info
+└── scripts/
+    └── manuscript_to_bib.py  Export cited papers to BibTeX (Google Docs + Word)
 ```
 
 ---
