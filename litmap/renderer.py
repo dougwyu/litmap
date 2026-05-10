@@ -98,21 +98,21 @@ def render_html(
             name="Manuscript",
         ))
 
-    # Cluster label annotations
+    # Cluster label annotations (Plotly annotations support background boxes)
     if cluster_annotations:
-        ann_xs, ann_ys, ann_texts = [], [], []
+        plotly_annotations = []
         for _cid, (cx, cy, label) in cluster_annotations.items():
-            ann_xs.append(cx)
-            ann_ys.append(cy)
-            ann_texts.append(f"<b>{label}</b>")
-        fig.add_trace(go.Scatter(
-            x=ann_xs, y=ann_ys,
-            mode="text",
-            text=ann_texts,
-            textfont=dict(size=13, color="#1a6b6b", family="Arial Black, sans-serif"),
-            hoverinfo="skip",
-            showlegend=False,
-        ))
+            plotly_annotations.append(dict(
+                x=cx, y=cy,
+                text=f"<b>{label}</b>",
+                showarrow=False,
+                font=dict(size=13, color="#1a6b6b", family="Arial Black, sans-serif"),
+                bgcolor="rgba(255,255,255,0.85)",
+                bordercolor="#1a6b6b",
+                borderwidth=1,
+                borderpad=4,
+            ))
+        fig.update_layout(annotations=plotly_annotations)
 
     fig.update_layout(
         showlegend=False,
