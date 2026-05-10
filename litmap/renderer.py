@@ -109,7 +109,7 @@ def render_html(
             x=ann_xs, y=ann_ys,
             mode="text",
             text=ann_texts,
-            textfont=dict(size=11, color="rgba(40,40,40,0.75)"),
+            textfont=dict(size=13, color="#1a6b6b", family="Arial Black, sans-serif"),
             hoverinfo="skip",
             showlegend=False,
         ))
@@ -171,10 +171,10 @@ def render_static(
         for _cid, (cx, cy, label) in cluster_annotations.items():
             ax.text(
                 cx, cy, label,
-                fontsize=8, fontweight="bold",
-                color="0.25", alpha=0.8,
+                fontsize=9, fontweight="bold",
+                color="#1a6b6b",
                 ha="center", va="center",
-                bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="none", alpha=0.6),
+                bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="#1a6b6b", alpha=0.85, linewidth=0.8),
                 zorder=5,
             )
 
