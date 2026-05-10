@@ -267,14 +267,20 @@ def sync_fulltext(
     zotero_db: Path = ZOTERO_DB,
     force: bool = False,
     max_tokens: int = _MAX_TOKENS,
+    collection: Optional[str] = None,
 ) -> tuple[int, int]:
-    """Embed full PDF text for all Zotero items that have a local PDF.
+    """Embed full PDF text for Zotero items that have a local PDF.
 
+    If collection is given, only items in that collection are processed.
     Skips items already in fulltext_embeddings unless force=True.
     Returns (n_embedded, n_skipped_no_pdf).
     """
     init_db(db_path)
-    all_items = get_all_items(zotero_db)
+    if collection:
+        from litmap.zotero import get_collection
+        all_items = get_collection(collection, zotero_db)
+    else:
+        all_items = get_all_items(zotero_db)
     items_with_pdf = [i for i in all_items if i.pdf_path is not None]
     n_skipped_no_pdf = len(all_items) - len(items_with_pdf)
 

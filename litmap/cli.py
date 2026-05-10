@@ -23,7 +23,7 @@ def map_cmd(
     manuscript: Optional[Path] = typer.Option(None, "--manuscript", "-m", help="Manuscript file (PDF/DOCX/LaTeX)"),
     union: bool = typer.Option(False, "--union", help="Use collection ∪ bibliography as paper set"),
     output: Path = typer.Option(Path("litmap_output"), "--output", "-o", help="Output base name"),
-    n_neighbors: int = typer.Option(15, "--n-neighbors", help="UMAP n_neighbors"),
+    n_neighbors: int = typer.Option(3, "--n-neighbors", help="UMAP n_neighbors"),
     edge_k: int = typer.Option(3, "--edge-k", help="k-NN edges per node"),
     fmt: str = typer.Option("all", "--format", "-f", help="html | pdf | png | all"),
     label_clusters: bool = typer.Option(True, "--label-clusters/--no-label-clusters", help="Annotate HDBSCAN clusters with TF-IDF keywords"),
@@ -282,21 +282,24 @@ def sync_cmd(
 
 @app.command("sync-fulltext")
 def sync_fulltext_cmd(
+    collection: Optional[str] = typer.Option(None, "--collection", "-c", help="Scope to a Zotero collection"),
     force: bool = typer.Option(False, "--force", help="Re-embed even already-processed PDFs"),
     max_tokens: int = typer.Option(3000, "--max-tokens", help="Max tokens per chunk (default 3000; up to 8000)"),
     db_path: Path = typer.Option(_DEFAULT_DB, hidden=True),
     zotero_db: Path = typer.Option(_DEFAULT_ZOTERO, hidden=True),
 ):
-    """Embed full PDF text for all Zotero items with a local PDF attachment.
+    """Embed full PDF text for Zotero items with a local PDF attachment.
 
     Vectors are stored in the fulltext_embeddings table and automatically
     preferred over title+abstract embeddings in search, map, and cluster.
     Safe to interrupt and resume — already-embedded papers are skipped.
+    Use --collection to process only a subset of your library.
     """
     from litmap.embedder import sync_fulltext, init_db
     init_db(db_path)
-    n_embedded, n_no_pdf = sync_fulltext(db_path, zotero_db, force=force, max_tokens=max_tokens)
-    typer.echo(f"Embedded {n_embedded} PDFs. ({n_no_pdf} items had no local PDF and were skipped.)")
+    n_embedded, n_no_pdf = sync_fulltext(db_path, zotero_db, force=force, max_tokens=max_tokens, collection=collection)
+    scope = f"collection '{collection}'" if collection else "full library"
+    typer.echo(f"Embedded {n_embedded} PDFs from {scope}. ({n_no_pdf} items had no local PDF and were skipped.)")
 
 
 @app.command("cluster")
