@@ -87,7 +87,7 @@ def cluster_labels(
     keys = list(layout.keys())
     coords = np.array([layout[k] for k in keys])
 
-    clusterer = HDBSCAN(min_cluster_size=min_cluster_size, store_centers="centroid")
+    clusterer = HDBSCAN(min_cluster_size=min_cluster_size, store_centers="centroid", copy=False)
     labels = clusterer.fit_predict(coords)
 
     # Build item index for text lookup
