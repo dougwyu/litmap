@@ -11,6 +11,21 @@ import numpy as np
 from scipy.cluster.hierarchy import fcluster, linkage
 
 from litmap._text import last_name
+from litmap.zotero import Item
+
+
+def _read_pdf_text(item: Item) -> str:
+    """Extract plain text from item's local PDF. Returns empty string if unavailable."""
+    if item.pdf_path is None:
+        return ""
+    try:
+        import fitz
+        doc = fitz.open(str(item.pdf_path))
+        text = "\n".join(page.get_text() for page in doc)
+        doc.close()
+        return text
+    except Exception:
+        return ""
 
 
 def compute_hierarchy(matrix: np.ndarray) -> np.ndarray:
@@ -134,11 +149,13 @@ def _tfidf_labels(
             first_words = " ".join((itm.title or "").split()[:5])
             out[gid] = first_words if first_words else f"cluster {gid}"
         else:
-            doc = " ".join(
-                f"{items_by_key[k].title} {items_by_key[k].abstract}" for k in keys
-            )
+            parts = []
+            for k in keys:
+                itm = items_by_key[k]
+                pdf_text = _read_pdf_text(itm)
+                parts.append(pdf_text if pdf_text else f"{itm.title} {itm.abstract}")
             multi_ids.append(gid)
-            multi_docs.append(doc)
+            multi_docs.append(" ".join(parts))
 
     if multi_docs:
         vec = Vectoriser(

@@ -30,6 +30,20 @@ def compute_layout(
     return {key: (float(coords[i, 0]), float(coords[i, 1])) for i, key in enumerate(keys)}
 
 
+def _read_pdf_text(item: Item) -> str:
+    """Extract plain text from item's local PDF. Returns empty string if unavailable."""
+    if item.pdf_path is None:
+        return ""
+    try:
+        import fitz
+        doc = fitz.open(str(item.pdf_path))
+        text = "\n".join(page.get_text() for page in doc)
+        doc.close()
+        return text
+    except Exception:
+        return ""
+
+
 def cluster_labels(
     layout: dict[str, tuple[float, float]],
     items: list[Item],
@@ -37,8 +51,9 @@ def cluster_labels(
 ) -> dict[str, tuple[float, float, str]]:
     """Run HDBSCAN on 2D layout coords; label each cluster with TF-IDF keywords.
 
-    Returns {cluster_id: (centroid_x, centroid_y, label)} for all clusters
-    except noise (cluster -1).
+    TF-IDF corpus uses full PDF text when available, falling back to
+    title + abstract per paper. Returns {cluster_id: (centroid_x, centroid_y, label)}
+    for all clusters except noise (cluster -1).
     """
     keys = list(layout.keys())
     coords = np.array([layout[k] for k in keys])
@@ -59,14 +74,19 @@ def cluster_labels(
     if not clusters:
         return {}
 
-    # TF-IDF over title + abstract for each cluster
+    # TF-IDF over full PDF text when available, falling back to title+abstract
     cluster_ids = sorted(clusters.keys())
     corpus = []
     for cid in cluster_ids:
         texts = []
         for key in clusters[cid]:
             item = item_idx.get(key)
-            if item:
+            if item is None:
+                continue
+            pdf_text = _read_pdf_text(item)
+            if pdf_text:
+                texts.append(pdf_text)
+            else:
                 texts.append(f"{item.title} {item.abstract}")
         corpus.append(" ".join(texts))
 
