@@ -205,7 +205,7 @@ Embeddings are stored in `~/LitLake/embeddings.db` (SQLite), created automatical
 
 All commands prefer full-text vectors when available and fall back to title+abstract per paper — the two tables can be populated independently and at different token limits.
 
-Approximate database sizes for a library of ~16,000 items with PDFs: `embeddings` ~50 MB, `fulltext_embeddings` ~50 MB, total ~100 MB.
+Approximate database sizes for a library of ~16,000 items with PDFs: `embeddings` ~50 MB, `fulltext_embeddings` ~170 MB, total ~220 MB.
 
 To inspect coverage:
 
@@ -235,7 +235,7 @@ uv run scripts/manuscript_to_bib.py manuscript.docx refs.bib --zotero-db ~/Zoter
 Works with two document types:
 
 - **Word documents with live Zotero field codes** — citations inserted via the Zotero Word or Google Docs plugin, not yet unlinked. Keys are extracted directly from the field code JSON and matched exactly.
-- **Google Docs exports (Download as .docx)** — field codes are stripped on export, so the script falls back to extracting `https://doi.org/` links from the Zotero-generated bibliography and matching them against Zotero by DOI. Requires the document to contain a Zotero bibliography added via the Zotero Google Docs plugin.
+- **Google Docs exports (Download as .docx)** — field codes are stripped on export, so the script falls back to extracting `https://doi.org/` links from the Zotero-generated bibliography and matching them against Zotero by DOI. Requires the document to contain a Zotero bibliography that includes DOI numbers (e.g. Methods in Ecology & Evolution style).
 
 The script tries field codes first and falls back to DOI extraction automatically. Output is a `.bib` file importable via Zotero **File → Import**. Errors if the output file already exists.
 
