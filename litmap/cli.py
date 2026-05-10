@@ -26,6 +26,8 @@ def map_cmd(
     n_neighbors: int = typer.Option(15, "--n-neighbors", help="UMAP n_neighbors"),
     edge_k: int = typer.Option(3, "--edge-k", help="k-NN edges per node"),
     fmt: str = typer.Option("all", "--format", "-f", help="html | pdf | png | all"),
+    label_clusters: bool = typer.Option(True, "--label-clusters/--no-label-clusters", help="Annotate HDBSCAN clusters with TF-IDF keywords"),
+    min_cluster_size: int = typer.Option(5, "--min-cluster-size", help="HDBSCAN min_cluster_size [default: 5]"),
     db_path: Path = typer.Option(_DEFAULT_DB, hidden=True),
     zotero_db: Path = typer.Option(_DEFAULT_ZOTERO, hidden=True),
 ):
@@ -33,7 +35,7 @@ def map_cmd(
     from litmap.zotero import get_collection, get_all_items
     from litmap.manuscript import parse_bibliography, extract_manuscript_text, match_items_to_zotero
     from litmap.embedder import embed_text, load_all_fulltext_embeddings as load_all_embeddings, init_db
-    from litmap.layout import compute_layout, build_graph
+    from litmap.layout import compute_layout, build_graph, cluster_labels
     from litmap.renderer import render_html, render_static
     import numpy as np
 
@@ -115,14 +117,20 @@ def map_cmd(
     layout = compute_layout(matrix, loaded_keys, n_neighbors=n_neighbors)
     edges = build_graph(matrix, loaded_keys, k=edge_k)
 
+    # --- Cluster labels -----------------------------------------------------
+    annotations = {}
+    if label_clusters and len(loaded_keys) >= min_cluster_size * 2:
+        annotations = cluster_labels(layout, items, min_cluster_size=min_cluster_size)
+        typer.echo(f"Found {len(annotations)} clusters.", err=True)
+
     # --- Render -------------------------------------------------------------
     if fmt in ("html", "all"):
-        html = render_html(layout, edges, items, manuscript_key)
+        html = render_html(layout, edges, items, manuscript_key, cluster_annotations=annotations)
         html_path = Path(str(output) + ".html")
         html_path.write_text(html)
         typer.echo(f"Wrote {html_path}")
     if fmt in ("png", "pdf", "all"):
-        render_static(layout, edges, items, manuscript_key, path=output)
+        render_static(layout, edges, items, manuscript_key, path=output, cluster_annotations=annotations)
         typer.echo(f"Wrote {output}.png and {output}.pdf")
 
 

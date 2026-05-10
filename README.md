@@ -82,14 +82,19 @@ See [docs/tutorial.md](docs/tutorial.md) for a full walkthrough.
 
 ```
 Options:
-  -c, --collection TEXT     Zotero collection name
-  -m, --manuscript PATH     Manuscript file (PDF, DOCX, .bib, .tex)
-      --union               Use collection ∪ manuscript bibliography
-  -o, --output PATH         Output base path [default: litmap_output]
-      --n-neighbors INT     UMAP n_neighbors [default: 15]
-      --edge-k INT          k-NN edges per node [default: 3]
-  -f, --format TEXT         html | png | pdf | all [default: all]
+  -c, --collection TEXT          Zotero collection name
+  -m, --manuscript PATH          Manuscript file (PDF, DOCX, .bib, .tex)
+      --union                    Use collection ∪ manuscript bibliography
+  -o, --output PATH              Output base path [default: litmap_output]
+      --n-neighbors INT          UMAP n_neighbors [default: 15]
+      --edge-k INT               k-NN edges per node [default: 3]
+  -f, --format TEXT              html | png | pdf | all [default: all]
+      --label-clusters           Annotate HDBSCAN clusters with TF-IDF keywords [default: on]
+      --no-label-clusters        Disable cluster annotations
+      --min-cluster-size INT     HDBSCAN min_cluster_size [default: 5]
 ```
+
+Cluster labels are generated automatically using HDBSCAN on the 2D layout coordinates, with each cluster labelled by its top-3 TF-IDF keyword phrases over member titles and abstracts. Noise points (papers HDBSCAN couldn't assign to a cluster) are left unlabelled. Use `--no-label-clusters` to disable, or `--min-cluster-size` to control cluster granularity — larger values produce fewer, broader clusters.
 
 ### `litmap search`
 

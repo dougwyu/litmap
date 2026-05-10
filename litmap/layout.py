@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import numpy as np
 from sklearn.neighbors import NearestNeighbors
+from sklearn.cluster import HDBSCAN
+from sklearn.feature_extraction.text import TfidfVectorizer
 from umap import UMAP
+
+from litmap.zotero import Item
 
 
 def compute_layout(
@@ -24,6 +28,68 @@ def compute_layout(
     )
     coords = reducer.fit_transform(matrix)  # shape (n, 2)
     return {key: (float(coords[i, 0]), float(coords[i, 1])) for i, key in enumerate(keys)}
+
+
+def cluster_labels(
+    layout: dict[str, tuple[float, float]],
+    items: list[Item],
+    min_cluster_size: int = 5,
+) -> dict[str, tuple[float, float, str]]:
+    """Run HDBSCAN on 2D layout coords; label each cluster with TF-IDF keywords.
+
+    Returns {cluster_id: (centroid_x, centroid_y, label)} for all clusters
+    except noise (cluster -1).
+    """
+    keys = list(layout.keys())
+    coords = np.array([layout[k] for k in keys])
+
+    clusterer = HDBSCAN(min_cluster_size=min_cluster_size, store_centers="centroid")
+    labels = clusterer.fit_predict(coords)
+
+    # Build item index for text lookup
+    item_idx = {i.key: i for i in items}
+
+    # Group keys by cluster
+    from collections import defaultdict
+    clusters: dict[int, list[str]] = defaultdict(list)
+    for key, label in zip(keys, labels):
+        if label >= 0:
+            clusters[label].append(key)
+
+    if not clusters:
+        return {}
+
+    # TF-IDF over title + abstract for each cluster
+    cluster_ids = sorted(clusters.keys())
+    corpus = []
+    for cid in cluster_ids:
+        texts = []
+        for key in clusters[cid]:
+            item = item_idx.get(key)
+            if item:
+                texts.append(f"{item.title} {item.abstract}")
+        corpus.append(" ".join(texts))
+
+    tfidf = TfidfVectorizer(max_features=5000, stop_words="english", ngram_range=(1, 2))
+    try:
+        tfidf_matrix = tfidf.fit_transform(corpus)
+    except ValueError:
+        return {}
+    feature_names = np.array(tfidf.get_feature_names_out())
+
+    result: dict[int, tuple[float, float, str]] = {}
+    for i, cid in enumerate(cluster_ids):
+        # Top 3 TF-IDF terms for this cluster
+        row = np.asarray(tfidf_matrix[i].todense()).flatten()
+        top_idx = row.argsort()[-3:][::-1]
+        keywords = " · ".join(feature_names[top_idx])
+
+        # Centroid of cluster points in 2D
+        member_coords = coords[[j for j, lbl in enumerate(labels) if lbl == cid]]
+        cx, cy = float(member_coords[:, 0].mean()), float(member_coords[:, 1].mean())
+        result[cid] = (cx, cy, keywords)
+
+    return result
 
 
 def build_graph(

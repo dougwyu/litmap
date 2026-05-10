@@ -48,6 +48,7 @@ def render_html(
     edges: list[tuple[str, str, float]],
     items: list[Item],
     manuscript_key: Optional[str] = None,
+    cluster_annotations: Optional[dict] = None,
 ) -> str:
     idx = _build_item_index(items)
     xs_paper, ys_paper, texts_paper, hovers_paper, colors = [], [], [], [], []
@@ -96,6 +97,23 @@ def render_html(
             textfont=dict(size=10, color=_MANUSCRIPT_COLOR),
             name="Manuscript",
         ))
+
+    # Cluster label annotations
+    if cluster_annotations:
+        ann_xs, ann_ys, ann_texts = [], [], []
+        for _cid, (cx, cy, label) in cluster_annotations.items():
+            ann_xs.append(cx)
+            ann_ys.append(cy)
+            ann_texts.append(f"<b>{label}</b>")
+        fig.add_trace(go.Scatter(
+            x=ann_xs, y=ann_ys,
+            mode="text",
+            text=ann_texts,
+            textfont=dict(size=11, color="rgba(40,40,40,0.75)"),
+            hoverinfo="skip",
+            showlegend=False,
+        ))
+
     fig.update_layout(
         showlegend=False,
         xaxis=dict(showticklabels=False, showgrid=False, zeroline=False),
@@ -113,6 +131,7 @@ def render_static(
     manuscript_key: Optional[str] = None,
     path: Path = Path("litmap_output"),
     dpi: int = 300,
+    cluster_annotations: Optional[dict] = None,
 ) -> None:
     idx = _build_item_index(items)
     all_x = [v[0] for v in layout.values()]
@@ -146,6 +165,18 @@ def render_static(
         label_artists.append(t)
 
     adjust_text(label_artists, ax=ax, arrowprops=dict(arrowstyle="-", color="grey", lw=0.5))
+
+    # Cluster label annotations
+    if cluster_annotations:
+        for _cid, (cx, cy, label) in cluster_annotations.items():
+            ax.text(
+                cx, cy, label,
+                fontsize=8, fontweight="bold",
+                color="0.25", alpha=0.8,
+                ha="center", va="center",
+                bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="none", alpha=0.6),
+                zorder=5,
+            )
 
     ax.set_xticks([])
     ax.set_yticks([])
