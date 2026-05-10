@@ -95,6 +95,7 @@ Options:
       --label-clusters           Annotate HDBSCAN clusters with TF-IDF keywords [default: on]
       --no-label-clusters        Disable cluster annotations
       --min-cluster-size INT     HDBSCAN min_cluster_size [default: 5]
+      --center-manuscript        Bias manuscript node toward centre of UMAP layout
 ```
 
 **Paper set.** The paper set depends on which flags are provided:

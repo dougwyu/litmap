@@ -28,6 +28,7 @@ def map_cmd(
     fmt: str = typer.Option("all", "--format", "-f", help="html | pdf | png | all"),
     label_clusters: bool = typer.Option(True, "--label-clusters/--no-label-clusters", help="Annotate HDBSCAN clusters with TF-IDF keywords"),
     min_cluster_size: int = typer.Option(5, "--min-cluster-size", help="HDBSCAN min_cluster_size [default: 5]"),
+    center_manuscript: bool = typer.Option(False, "--center-manuscript", help="Bias manuscript node toward centre of UMAP layout"),
     db_path: Path = typer.Option(_DEFAULT_DB, hidden=True),
     zotero_db: Path = typer.Option(_DEFAULT_ZOTERO, hidden=True),
 ):
@@ -114,7 +115,8 @@ def map_cmd(
     items = [i for i in items if i.key in key_order]
 
     # --- Layout + graph -----------------------------------------------------
-    layout = compute_layout(matrix, loaded_keys, n_neighbors=n_neighbors)
+    center_key = manuscript_key if (center_manuscript and manuscript_key) else None
+    layout = compute_layout(matrix, loaded_keys, n_neighbors=n_neighbors, center_key=center_key)
     edges = build_graph(matrix, loaded_keys, k=edge_k)
 
     # --- Cluster labels -----------------------------------------------------

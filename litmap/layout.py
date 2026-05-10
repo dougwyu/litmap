@@ -14,17 +14,46 @@ def compute_layout(
     keys: list[str],
     n_neighbors: int = 15,
     min_dist: float = 0.1,
+    center_key: str | None = None,
 ) -> dict[str, tuple[float, float]]:
-    """Reduce embedding matrix to 2D with UMAP. Returns {key: (x, y)}."""
+    """Reduce embedding matrix to 2D with UMAP. Returns {key: (x, y)}.
+
+    If center_key is provided and present in keys, that point's UMAP init
+    position is set to [0, 0] (the centre), biasing it toward the middle
+    while still letting UMAP optimise its final position semantically.
+    """
     n = len(keys)
-    # UMAP requires n_neighbors < n_samples
     actual_neighbors = min(n_neighbors, n - 1)
+
+    init = "spectral"
+    if center_key is not None and center_key in keys:
+        # Use spectral init, then override the target point's starting position
+        # UMAP accepts an (n, 2) array as init
+        from sklearn.utils import check_random_state
+        # Build a spectral init via a temporary UMAP, then centre the target
+        tmp = UMAP(
+            n_neighbors=actual_neighbors,
+            min_dist=min_dist,
+            metric="cosine",
+            random_state=42,
+            n_jobs=1,
+            n_epochs=0,  # just initialise, don't optimise
+        )
+        try:
+            init_coords = tmp.fit_transform(matrix)
+            ci = keys.index(center_key)
+            init_coords[ci] = [0.0, 0.0]
+            init = init_coords
+        except Exception:
+            init = "spectral"
+
     reducer = UMAP(
         n_neighbors=actual_neighbors,
         min_dist=min_dist,
         metric="cosine",
         random_state=42,
         n_jobs=1,
+        init=init,
     )
     coords = reducer.fit_transform(matrix)  # shape (n, 2)
     return {key: (float(coords[i, 0]), float(coords[i, 1])) for i, key in enumerate(keys)}
