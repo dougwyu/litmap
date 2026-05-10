@@ -178,9 +178,14 @@ The job is safe to interrupt and resume — already-embedded papers are skipped 
 # Embed a single collection at higher quality
 litmap sync-fulltext --collection "My Papers" --max-tokens 6000
 
+# Re-embed a collection at 8000 tokens for richer semantic content
+litmap sync-fulltext --collection "My Papers" --max-tokens 8000 --force
+
 # Re-embed everything at a new token limit
 litmap sync-fulltext --max-tokens 3000 --force
 ```
+
+A common workflow is to run the full library at 3000 tokens, then re-embed the specific collection you are actively working with at 8000 tokens. This gives richer semantic content for that collection — improving results from `litmap map`, `litmap cluster`, and `litmap search` — without the time cost of re-embedding your entire library.
 
 Approximate throughput on Apple Silicon (MPS) on a MacBook Air M4: ~12 s/paper at 3000 tokens, ~100 s/paper at 8000 tokens. Encoding time scales roughly as O(n^2) in token count because transformer attention computes interactions between every pair of tokens — doubling the sequence length roughly quadruples the compute. This makes 8000-token encoding disproportionately expensive; 3000 tokens is recommended.
 
