@@ -74,7 +74,7 @@ def cluster_labels(
     if not clusters:
         return {}
 
-    # TF-IDF over full PDF text when available, falling back to title+abstract
+    # TF-IDF over title+abstract for clean keyword extraction
     cluster_ids = sorted(clusters.keys())
     corpus = []
     for cid in cluster_ids:
@@ -83,11 +83,7 @@ def cluster_labels(
             item = item_idx.get(key)
             if item is None:
                 continue
-            pdf_text = _read_pdf_text(item)
-            if pdf_text:
-                texts.append(pdf_text)
-            else:
-                texts.append(f"{item.title} {item.abstract}")
+            texts.append(f"{item.title} {item.abstract}")
         corpus.append(" ".join(texts))
 
     tfidf = TfidfVectorizer(max_features=5000, stop_words="english", ngram_range=(1, 2))

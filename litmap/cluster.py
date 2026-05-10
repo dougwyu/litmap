@@ -152,8 +152,7 @@ def _tfidf_labels(
             parts = []
             for k in keys:
                 itm = items_by_key[k]
-                pdf_text = _read_pdf_text(itm)
-                parts.append(pdf_text if pdf_text else f"{itm.title} {itm.abstract}")
+                parts.append(f"{itm.title} {itm.abstract}")
             multi_ids.append(gid)
             multi_docs.append(" ".join(parts))
 

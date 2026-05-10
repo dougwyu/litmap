@@ -108,7 +108,7 @@ Options:
 
 **Edges.** Each paper is connected to its `--edge-k` nearest neighbours in embedding space. In the static PNG/PDF output, edge opacity is weighted by cosine similarity — darker edges indicate stronger semantic overlap. The manuscript node (red star) accumulates both its own outgoing edges and incoming edges from papers that count it among their nearest neighbours, so it typically has more connections than regular nodes.
 
-**Cluster labels.** Generated automatically by running HDBSCAN on the 2D layout coordinates, then labelling each cluster with its top-3 TF-IDF keyword phrases. Full PDF text is used for the TF-IDF corpus when available (i.e. after running `litmap sync-fulltext`), falling back to title+abstract per paper. Noise points (papers HDBSCAN couldn't assign to any cluster) are left unlabelled. Labels are rendered in dark teal with a white background box. Use `--no-label-clusters` to disable, or `--min-cluster-size` to control granularity — larger values produce fewer, broader clusters.
+**Cluster labels.** Generated automatically by running HDBSCAN on the 2D layout coordinates, then labelling each cluster with its top-3 TF-IDF keyword phrases. Title and abstract are used as the TF-IDF corpus (full PDF text produces noisy labels from reference lists and boilerplate). Noise points (papers HDBSCAN couldn't assign to any cluster) are left unlabelled. Labels are rendered in dark teal with a white background box. Use `--no-label-clusters` to disable, or `--min-cluster-size` to control granularity — larger values produce fewer, broader clusters.
 
 ### `litmap search`
 
@@ -140,7 +140,7 @@ Options:
 
 Writes `<output>.html` (interactive dendrogram), `.pdf` + `.png` (static 300 DPI), `.md` + `.json` (labelled outline), and `.linkage.npy` (scipy linkage cache). If neither `--collection` nor `--manuscript` is given, the entire library is clustered. If both are given, `--union` is required.
 
-Level-1 cluster count defaults to `max(2, round(sqrt(N/2)))`; any level-1 cluster with at least `--subcluster-threshold` papers is split into sub-clusters. Cluster labels are TF-IDF keyword triplets derived from member full PDF text when available, falling back to title+abstract.
+Level-1 cluster count defaults to `max(2, round(sqrt(N/2)))`; any level-1 cluster with at least `--subcluster-threshold` papers is split into sub-clusters. Cluster labels are TF-IDF keyword triplets derived from member title and abstract text.
 
 ### `litmap info <paper>`
 
