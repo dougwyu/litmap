@@ -106,6 +106,13 @@ def embeddings_db(tmp_path):
             vector     BLOB NOT NULL,
             embedded_at TEXT NOT NULL
         );
+        CREATE TABLE fulltext_embeddings (
+            zotero_key  TEXT PRIMARY KEY,
+            vector      BLOB NOT NULL,
+            embedded_at TEXT NOT NULL,
+            n_tokens    INTEGER,
+            n_chunks    INTEGER
+        );
         CREATE TABLE meta (
             key   TEXT PRIMARY KEY,
             value TEXT NOT NULL
