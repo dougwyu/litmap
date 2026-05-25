@@ -1,6 +1,6 @@
 ---
 name: manuscript-audit
-description: "Audit and polish scientific manuscripts for journal submission. Use this skill whenever the user has a manuscript draft (docx, pdf, or pasted text) for peer review. The skill performs four passes: (1) extracts all author-year citations and verifies claims against original PDFs in the user's Zotero library to ensure faithfulness, consulting the manuscript's reference list to disambiguate author-year citations; (2) identifies unsupported or weakly supported claims and suggests additional citations via semantic search of the library; (3) checks for logical inconsistencies, contradictions, and reasoning gaps within the manuscript; (4) copyedits for grammar, style, punctuation, flow, and journal conventions. Trigger on phrases like 'audit my manuscript,' 'review my citations,' 'fact-check my claims,' 'check my paper,' or 'prepare for submission.' (Claude Code only — uses litmap for semantic citation-gap detection.)"
+description: "Audit and polish scientific manuscripts for journal submission. Use this skill whenever the user has a manuscript draft (docx, pdf, or pasted text) for peer review. The skill performs four passes: (1) extracts all author-year citations and verifies claims against original PDFs in the user's Zotero library to ensure faithfulness, consulting the manuscript's reference list to disambiguate author-year citations; (2) identifies unsupported or weakly supported claims and suggests additional citations via semantic search of the library; (3) checks for logical inconsistencies, contradictions, and reasoning gaps within the manuscript; (4) copyedits for grammar, style, punctuation, flow, and journal conventions. Trigger on phrases like 'audit my manuscript,' 'review my citations,' 'fact-check my claims,' 'check my paper,' or 'prepare for submission.'. (Claude Code only — uses litmap for semantic citation-gap detection.)"
 compatibility: "Claude Code only. Requires zotero skill, pdf-reading skill, file-reading skill (if manuscript uploaded as file), and a working `uv run litmap` install at ~/src/Cowork/litmap."
 ---
 
@@ -199,27 +199,115 @@ Suggest: "Most temperate forests show declining productivity (Jones 2019)."
 
 ---
 
-## Stage 2: Citation Gap Detection (Semantic)
+## Stage 2: Citation Gap Detection & Suggestion
 
-> Calls `litmap search` against the user's local embeddings database. Requires Claude Code runtime — see banner above.
+> Calls `litmap search` against the user's local embeddings database for both REFS-marked and implicit citation gaps. Requires Claude Code runtime — see banner above.
 
-### Input
-- Manuscript (docx, pdf, or pasted text)
-- Reference list built in Stage 1
-- User's Zotero library (read via the zotero skill)
-- (Optional) `--collection` scope if the user named one
+### Step 0 — Resolve `(REFS)` Placeholders First
 
-### Procedure
+Before scanning for implicit gaps, check whether the author has explicitly marked citation gaps with a `(REFS)` placeholder. These are the highest-priority gaps because the author already knows a citation is needed.
 
-1. **Identify unsupported claims.** Scan the manuscript for empirical or theoretical assertions that lack an in-text citation. Build a list of records:
+**Detect placeholders:**
 
-    ```
-    {claim_text, sentence_context, section_heading}
-    ```
+```bash
+grep -n "REFS" manuscript.txt
+```
 
-    where `sentence_context` is the claim's sentence plus the one preceding sentence (for query disambiguation).
+Or in Python on the extracted text:
 
-2. **(Optional, ≥30 unique citations only) Up-front cluster overview.**
+```python
+import re
+for m in re.finditer(r'\bREFS\b', text):
+    start = text.rfind('\n', 0, m.start()) + 1
+    end = text.find('\n', m.end())
+    print(f"Line {text[:m.start()].count(chr(10))+1}: {text[start:end].strip()}")
+```
+
+For each `(REFS)` occurrence, extract **5–10 lines of surrounding context** — enough to understand the full claim being supported, including any citations already present in the same sentence or parenthetical cluster (they reveal the topic and the kind of evidence expected).
+
+**Understand the claim:** Identify:
+- The core assertion (what is being claimed?)
+- The type of evidence expected (empirical study? review? methodology paper? grey literature?)
+- The implied audience (e.g., a claim about audit standards needs assurance/accounting literature; a claim about SDMs needs ecology literature; a claim about market mechanisms needs economics literature)
+- Whether the REFS is additive (joining a cluster of existing citations) or the sole citation for the claim
+
+**Search Zotero for candidates — semantic + proper-noun pass:**
+
+*Primary — semantic search (litmap):*
+
+```bash
+uv run --project ~/src/Cowork/litmap litmap search \
+  --query "<claim assertion + 1–2 sentences of context>" \
+  --top-k 8 --format json
+```
+
+Parse the JSON `results` array. Each entry has `zotero_key`, `title`, `authors`, `year`, `doi`, `similarity`.
+
+*Complement — proper-noun pass (catches species names / acronyms / methods that semantic embeddings sometimes underweight):*
+
+```python
+import re, sqlite3
+
+def extract_proper_nouns(text: str) -> list[str]:
+    pattern = re.compile(
+        r'\b[A-Z]{2,}\b'
+        r'|\b[A-Z][a-z]+(?:\s[A-Z][a-z]+){1,2}\b'
+    )
+    skip = {"The", "A", "An", "In", "We", "Our", "This", "These", "For", "To"}
+    seen, result = set(), []
+    for m in pattern.findall(text):
+        if m not in skip and m not in seen:
+            seen.add(m); result.append(m)
+    return result
+```
+
+For each extracted term, run a focused `LIKE` query against `itemDataValues` for title and abstract (use the SQL pattern from Tier 1 of the zotero skill). Merge results with the litmap output, deduping by `zotero_key`; semantic hits sort first by similarity, proper-noun-only hits append after.
+
+**Filter and rank candidates:** Read the abstract of each candidate and assess:
+- Does the paper directly support the claim, or only tangentially?
+- Is it the right type of evidence (primary study, review, grey literature, canonical reference)?
+- Is it already cited elsewhere in the manuscript? (Avoid suggesting duplicates unless the same paper is appropriate in multiple locations.)
+- Does it serve the implied audience of the claim?
+
+Discard weak matches. For strong candidates, retrieve full reference details (authors, year, title, journal, DOI) using the item key.
+
+**Suggest no more than 3–4 candidates per REFS**, ranked by fit. For each, write one sentence explaining *why* it supports the specific claim — not just what the paper is about.
+
+Note: if the REFS sits in a cluster with existing citations, candidates should complement rather than duplicate the existing papers. Read those existing citations' titles/abstracts briefly to understand what is already covered.
+
+**Output format for REFS resolution:**
+
+```
+REFS — Line [N]
+Context: "[the sentence(s) containing REFS, with surrounding citations if any]"
+Claim: [1-sentence description of what evidence is needed]
+Implied audience: [e.g., assurance/finance/ecology/policy]
+
+Suggested citations:
+1. [Zotero key] Author et al. (year). Title. Journal. DOI.  (similarity 0.87)
+   → [1-sentence rationale]
+
+2. [Zotero key] Author et al. (year). Title. Journal. DOI.  (similarity 0.78)
+   → [1-sentence rationale]
+
+[If no strong candidates found:]
+No strong candidates found in [library name]. Consider searching [suggested alternative sources].
+```
+
+Deliver all REFS resolutions as a dedicated section before the implicit-gap analysis below.
+
+---
+
+### Implicit gap detection
+
+#### Input
+- The manuscript
+- The faithfulness audit + reference list from Stage 1
+- User's Zotero library
+
+#### Process
+
+1. **(Optional, ≥30 unique citations only) Up-front cluster overview.**
 
     ```bash
     uv run --project ~/src/Cowork/litmap litmap cluster \
@@ -228,9 +316,21 @@ Suggest: "Most temperate forests show declining productivity (Jones 2019)."
       --format md
     ```
 
-    Read `/tmp/audit_clusters.md` and present the thematic outline before per-claim analysis. The user can use this to spot whole topic areas that are over- or under-cited.
+    Read `/tmp/audit_clusters.md` and present the thematic outline before per-claim analysis. Use it to spot topic areas under- or over-cited.
 
-3. **Per-claim semantic search.** For each unsupported-claim record, call:
+2. **Identify unsupported claims:** Flag all sentences/paragraphs with:
+   - No citation
+   - Citation verdict ✗ **Unsupported** or ⚠ **Overstated** (from Stage 1)
+   - A citation to a paper that exists in Zotero but lacks the supporting passage
+
+3. **Extract claim context:** For each flagged claim, extract:
+   - The claim text (1–2 sentences)
+   - The section heading
+   - Key concepts (nouns, verbs, relationships)
+
+4. **Search for candidates — semantic + proper-noun pass:**
+
+    *Semantic (litmap, primary, always runs):*
 
     ```bash
     uv run --project ~/src/Cowork/litmap litmap search \
@@ -239,33 +339,60 @@ Suggest: "Most temperate forests show declining productivity (Jones 2019)."
       --top-k 5 --format json
     ```
 
-    `--collection` is included only if the user named one (e.g., "audit my manuscript against my Chapter 2 refs only").
+    `--collection` is included only if the user named one ("audit my manuscript against my Chapter 2 refs only").
 
-4. **Filter candidates.**
-    - Drop any candidate already cited in the manuscript (compare DOI first, then `lastname year` against the Stage 1 reference list).
-    - Drop any candidate with `similarity < 0.75` — below that threshold the match is usually too weak to be useful.
-    - Keep at most 3 candidates per claim.
+    *Proper-noun pass (always runs alongside):* use the same `extract_proper_nouns` helper from Step 0 and the same `LIKE` query against title + abstract. Merge with litmap results; semantic hits sort first by similarity, proper-noun-only hits append after.
 
-5. **Present the report.** For each unsupported claim:
+    If both passes return nothing usable (litmap top result similarity < 0.75 AND proper-noun pass returns no usable candidates), record "no semantically similar papers in your library; consider broader literature search outside the local Zotero collection" for that claim and move on.
 
-    ```markdown
-    ### Section 3.2 — claim text excerpt
-    > "<the claim sentence>"
+5. **Rank and suggest:** For each candidate:
+   - Check if the result's abstract/title matches the claim
+   - Assign relevance: **Perfect match**, **Strong**, **Moderate**, **Weak**
+   - Extract a brief snippet from the paper that supports the claim
+   - Write a 1-sentence justification for why this paper fits
 
-    Suggested citations from your library (similarity, zotero_key):
-    1. **0.87** — Valavi et al. 2022, *Predictive performance of presence-only SDMs* (`AAAA0001`)
-       DOI: 10.1111/geb.13476
-    2. **0.81** — Norberg 2019, *A comprehensive evaluation of predictive performance...* (`AAAA0042`)
-    ```
+6. **Prioritise suggestions:**
+   - Up to 2 papers for claims with no citation
+   - 1 replacement paper if the current citation is unsupported
+   - 1–2 supplementary papers if the citation is weak or too narrow
 
-    If no candidates clear the threshold, write plainly:
-    > "No semantically similar papers in your library. Consider broader literature search outside the local Zotero collection."
+   **Filter overlap with existing citations:** drop any candidate already cited in the manuscript (compare DOI first, then `lastname year` against the Stage 1 reference list).
 
-### Failure modes
+#### Output Format (implicit gaps)
+
+```
+[Claim Location] Results section, paragraph 3
+
+Unsupported claim: "Deep learning models outperform traditional SDMs
+in predicting species distributions."
+
+**Suggested citations:**
+
+1. **Max et al. 2022** — "Deep learning for species distribution modeling:
+A benchmark study"
+   Relevance: Perfect match  (similarity 0.91)
+   Snippet: "Deep neural networks achieved 12% higher AUC than MaxEnt
+   models on average across 500 species."
+   Justification: Directly compares deep learning to traditional SDMs with
+   quantitative results.
+
+2. **Brown & Kim 2021** — "Machine learning in biodiversity prediction"
+   Relevance: Strong  (similarity 0.78)
+   Snippet: "Recent advances in neural networks have improved predictive
+   accuracy for spatial distribution models."
+   Justification: Broader review of ML in SDMs; supports the claim but
+   is less specific than Max et al. 2022.
+
+---
+```
+
+#### Failure modes
 
 - **Cluster step fails** (e.g., < 2 cited papers found in Zotero): skip silently, proceed to per-claim search.
-- **`litmap` unavailable**: emit the install message ("Run `uv pip install -e .` from `~/src/Cowork/litmap`") and abort Stage 2. Do not silently fall back to keyword search — the user explicitly requested a semantic audit.
-- **Manuscript scope mismatch**: if `--collection X` was passed but X has fewer than 5 papers, warn the user and offer to broaden.
+- **`litmap` unavailable** (command not found, model fails to load, embeddings DB missing): emit the install/sync message ("Run `uv pip install -e .` from `~/src/Cowork/litmap`" or "Run `litmap sync` first") and abort Stage 2. Do NOT silently fall back to keyword/full-text-only search — the user explicitly requested a semantic audit.
+- **Manuscript `--collection` scope mismatch**: if `--collection X` was passed but X has fewer than 5 papers, warn the user and offer to broaden.
+
+---
 
 ## Stage 3: Logical Consistency Check
 
