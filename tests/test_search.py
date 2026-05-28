@@ -100,3 +100,28 @@ def test_dedup_no_key_items_respect_top_k():
     results = [{"doi": "", "title": "", "similarity": 1.0 - i * 0.01} for i in range(10)]
     deduped = deduplicate_results(results, top_k=3)
     assert len(deduped) == 3
+
+
+def test_dedup_doi_url_prefix_variants():
+    """https://doi.org/ and bare DOI forms of the same paper are treated as one."""
+    results = [
+        {"doi": "10.32942/X2TS5W",              "title": "Global metrics A", "similarity": 0.82},
+        {"doi": "https://doi.org/10.32942/X2TS5W", "title": "Global metrics A", "similarity": 0.81},
+        {"doi": "http://dx.doi.org/10.32942/X2TS5W", "title": "Global metrics A", "similarity": 0.80},
+        {"doi": "10.9999/other",                 "title": "Other Paper",     "similarity": 0.70},
+    ]
+    deduped = deduplicate_results(results, top_k=10)
+    assert len(deduped) == 2
+    assert deduped[0]["similarity"] == 0.82
+
+
+def test_dedup_same_title_different_doi():
+    """Preprint and published version sharing a title collapse to the higher-scoring entry."""
+    results = [
+        {"doi": "10.32942/X2TS5W",                    "title": "Global metrics for terrestrial biodiversity", "similarity": 0.82},
+        {"doi": "10.1146/annurev-environ-121522-045106", "title": "Global Metrics for Terrestrial Biodiversity", "similarity": 0.80},
+        {"doi": "10.9999/other",                        "title": "Different Paper",                            "similarity": 0.70},
+    ]
+    deduped = deduplicate_results(results, top_k=10)
+    assert len(deduped) == 2
+    assert deduped[0]["similarity"] == 0.82
