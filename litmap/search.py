@@ -41,29 +41,42 @@ def find_similar(
     return results[:top_k]
 
 
+_DOI_PREFIX_RE = re.compile(r'^https?://(?:dx\.)?doi\.org/', re.IGNORECASE)
+
+
+def _normalise_doi(raw: str) -> str:
+    return _DOI_PREFIX_RE.sub("", raw.strip()).lower()
+
+
 def deduplicate_results(
     enriched: list[dict],
     top_k: int,
 ) -> list[dict]:
     """Collapse duplicate papers from enriched search results.
 
-    Deduplication key: DOI (lowercased, stripped) if non-empty,
-    otherwise normalised title (lowercased, stripped).
-    Input must already be sorted by descending similarity — the first
-    occurrence of each canonical key is kept (highest score wins).
+    Two passes of deduplication:
+    1. Normalised DOI — strips https://doi.org/ and http://dx.doi.org/ prefixes
+       so the same paper stored as both a URL-form and bare DOI is caught.
+    2. Normalised title — catches preprint/published-version pairs that share a
+       title but carry different DOIs (e.g. bioRxiv preprint vs journal article).
+
+    Input must already be sorted by descending similarity — the first occurrence
+    of each canonical key is kept (highest score wins).
     Returns at most top_k entries.
     """
-    seen: set[str] = set()
+    seen_dois: set[str] = set()
+    seen_titles: set[str] = set()
     unique: list[dict] = []
     for r in enriched:
-        doi = (r.get("doi") or "").strip().lower()
+        doi = _normalise_doi(r.get("doi") or "")
         title = (r.get("title") or "").strip().lower()
-        canon = doi if doi else title
-        if not canon:
-            unique.append(r)  # no dedup key available — keep as-is
-        elif canon not in seen:
-            seen.add(canon)
-            unique.append(r)
+        if (doi and doi in seen_dois) or (title and title in seen_titles):
+            continue
+        if doi:
+            seen_dois.add(doi)
+        if title:
+            seen_titles.add(title)
+        unique.append(r)
         if len(unique) == top_k:
             break
     return unique
