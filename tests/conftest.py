@@ -86,6 +86,13 @@ def zotero_db(tmp_path):
         INSERT INTO collectionItems VALUES (1, 2);
         INSERT INTO collectionItems VALUES (2, 1);
         INSERT INTO collectionItems VALUES (2, 4);
+
+        CREATE TABLE itemAttachments (
+            itemID INTEGER PRIMARY KEY,
+            parentItemID INTEGER,
+            contentType TEXT,
+            path TEXT
+        );
     """)
     conn.commit()
     conn.close()

@@ -104,6 +104,7 @@ _ITEM_SELECT = """
     ) att ON att.parentItemID = i.itemID
     LEFT JOIN items atti ON atti.itemID = att.itemID
     WHERE i.itemTypeID NOT IN """ + _EXCLUDED_TYPES_SQL + """
+      AND i.libraryID = 1
       AND tv.value IS NOT NULL
 """
 
