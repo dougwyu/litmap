@@ -22,8 +22,10 @@ _tokenizer = None
 def _get_model():
     global _model
     if _model is None:
+        import torch
         from sentence_transformers import SentenceTransformer
-        _model = SentenceTransformer(MODEL_NAME, device="mps")
+        device = "mps" if torch.backends.mps.is_available() else "cpu"
+        _model = SentenceTransformer(MODEL_NAME, device=device)
     return _model
 
 

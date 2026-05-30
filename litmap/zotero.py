@@ -9,6 +9,13 @@ ZOTERO_DB = Path.home() / "Zotero" / "zotero.sqlite"
 EXCLUDED_TYPES = (14, 26)
 _EXCLUDED_TYPES_SQL = "(" + ",".join(str(t) for t in EXCLUDED_TYPES) + ")"
 
+# Personal "My Library" is libraryID 1; group libraries have other IDs
+# (e.g. the RD3 department group = 579642, ~28k energy items). The default
+# corpus is Personal only, so the large shared RD3 group is not embedded
+# and does not appear in default search/cluster results. Pass
+# library_id=None to get_all_items() to include every library.
+PERSONAL_LIBRARY_ID = 1
+
 
 @dataclass
 class Item:
@@ -104,22 +111,31 @@ _ITEM_SELECT = """
     ) att ON att.parentItemID = i.itemID
     LEFT JOIN items atti ON atti.itemID = att.itemID
     WHERE i.itemTypeID NOT IN """ + _EXCLUDED_TYPES_SQL + """
-      AND i.libraryID = 1
       AND tv.value IS NOT NULL
 """
 
 
-def get_all_items(db_path: Path = ZOTERO_DB) -> list[Item]:
+def get_all_items(
+    db_path: Path = ZOTERO_DB,
+    library_id: Optional[int] = PERSONAL_LIBRARY_ID,
+) -> list[Item]:
+    """All citable items. Defaults to the Personal library only
+    (library_id=PERSONAL_LIBRARY_ID); pass library_id=None for every
+    library (incl. the RD3 group)."""
     zotero_base = db_path.parent
     with _connect(db_path) as conn:
         fids = _field_ids(conn)
         atid = _author_type_id(conn)
+        params = {"title_id": fids["title"], "abs_id": fids["abstractNote"],
+                  "date_id": fids["date"], "doi_id": fids["DOI"],
+                  "keywords_id": fids.get("keywords"),
+                  "author_type": atid}
+        lib_sql = ""
+        if library_id is not None:
+            lib_sql = " AND i.libraryID = :library_id"
+            params["library_id"] = library_id
         rows = conn.execute(
-            _ITEM_SELECT + " GROUP BY i.itemID",
-            {"title_id": fids["title"], "abs_id": fids["abstractNote"],
-             "date_id": fids["date"], "doi_id": fids["DOI"],
-             "keywords_id": fids.get("keywords"),
-             "author_type": atid},
+            _ITEM_SELECT + lib_sql + " GROUP BY i.itemID", params
         ).fetchall()
     return _rows_to_items(rows, zotero_base)
 

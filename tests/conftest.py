@@ -33,6 +33,7 @@ def zotero_db(tmp_path):
         INSERT INTO items VALUES (2, 2, 1, 'AAAA0002');
         INSERT INTO items VALUES (3, 14, 1, 'AAAA0003');
         INSERT INTO items VALUES (4, 2, 1, 'AAAA0004');
+        INSERT INTO items VALUES (5, 2, 999, 'GRP00005');  -- group library (RD3-like)
 
         CREATE TABLE itemDataValues (valueID INTEGER PRIMARY KEY, value TEXT);
         INSERT INTO itemDataValues VALUES (101, 'Ecology of Networks');
@@ -47,6 +48,10 @@ def zotero_db(tmp_path):
         INSERT INTO itemDataValues VALUES (302, 'Abstract about traits');
         INSERT INTO itemDataValues VALUES (303, '2023');
         INSERT INTO itemDataValues VALUES (304, '10.1111/trait');
+        INSERT INTO itemDataValues VALUES (501, 'Group Energy Paper');
+        INSERT INTO itemDataValues VALUES (502, 'Abstract about energy');
+        INSERT INTO itemDataValues VALUES (503, '2024');
+        INSERT INTO itemDataValues VALUES (504, '10.9999/grp');
 
         CREATE TABLE itemData (itemID INTEGER, fieldID INTEGER, valueID INTEGER);
         INSERT INTO itemData VALUES (1, 1, 101);
@@ -61,16 +66,22 @@ def zotero_db(tmp_path):
         INSERT INTO itemData VALUES (4, 2, 302);
         INSERT INTO itemData VALUES (4, 6, 303);
         INSERT INTO itemData VALUES (4, 8, 304);
+        INSERT INTO itemData VALUES (5, 1, 501);
+        INSERT INTO itemData VALUES (5, 2, 502);
+        INSERT INTO itemData VALUES (5, 6, 503);
+        INSERT INTO itemData VALUES (5, 8, 504);
 
         CREATE TABLE creators (creatorID INTEGER PRIMARY KEY, firstName TEXT, lastName TEXT);
         INSERT INTO creators VALUES (1, 'Jane', 'Smith');
         INSERT INTO creators VALUES (2, 'Bob', 'Jones');
+        INSERT INTO creators VALUES (3, 'Lin', 'Zhang');
 
         CREATE TABLE itemCreators (
             itemID INTEGER, creatorID INTEGER, creatorTypeID INTEGER, orderIndex INTEGER
         );
         INSERT INTO itemCreators VALUES (1, 1, 1, 0);
         INSERT INTO itemCreators VALUES (2, 2, 1, 0);
+        INSERT INTO itemCreators VALUES (5, 3, 1, 0);
 
         CREATE TABLE collections (
             collectionID INTEGER PRIMARY KEY,
@@ -88,11 +99,10 @@ def zotero_db(tmp_path):
         INSERT INTO collectionItems VALUES (2, 4);
 
         CREATE TABLE itemAttachments (
-            itemID INTEGER PRIMARY KEY,
-            parentItemID INTEGER,
-            contentType TEXT,
-            path TEXT
+            itemID INTEGER, parentItemID INTEGER, path TEXT, contentType TEXT
         );
+        -- item 3 (the attachment) is the PDF of item 1
+        INSERT INTO itemAttachments VALUES (3, 1, 'storage:paper.pdf', 'application/pdf');
     """)
     conn.commit()
     conn.close()
