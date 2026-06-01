@@ -2,7 +2,10 @@
 name = "litmap"
 version = "0.1.0"
 description = "Semantic map and search for Zotero libraries"
-requires-python = ">=3.11,<3.14"
+# Python 3.11 only: the torch<2.3 override (last Intel-macOS wheel) pins torch 2.2.2,
+# whose TorchDynamo doesn't support Python 3.12+, which transformers' ModernBERT needs
+# at import time (@torch.compile). 3.11 has torch 2.2.2 wheels for both arm64 and x86_64.
+requires-python = ">=3.11,<3.12"
 
 dependencies = [
     "sentence-transformers>=3.0.0",
