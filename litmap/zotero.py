@@ -84,7 +84,7 @@ _ITEM_SELECT = """
         i.key,
         tv.value  AS title,
         av.value  AS abstract,
-        GROUP_CONCAT(c.lastName || ', ' || c.firstName, '; ') AS authors,
+        GROUP_CONCAT(c.lastName || ', ' || c.firstName, '; ' ORDER BY ic.orderIndex) AS authors,
         dv.value  AS year,
         doiv.value AS doi,
         kv.value  AS keywords,
