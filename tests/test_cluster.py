@@ -436,15 +436,15 @@ def test_cluster_cmd_warns_on_unembedded_papers(
     # has 4 papers but only 3 are embedded, so 1 should be skipped with a warning.
     conn = sqlite3.connect(zotero_db)
     conn.executescript("""
-        INSERT INTO items VALUES (5, 2, 1, 'AAAA0005');
+        INSERT INTO items VALUES (6, 2, 1, 'AAAA0005');
         INSERT INTO itemDataValues VALUES (401, 'Unembedded Paper');
         INSERT INTO itemDataValues VALUES (402, 'Abstract unembedded');
         INSERT INTO itemDataValues VALUES (403, '2024');
         INSERT INTO itemDataValues VALUES (404, '10.9999/zzz');
-        INSERT INTO itemData VALUES (5, 1, 401);
-        INSERT INTO itemData VALUES (5, 2, 402);
-        INSERT INTO itemData VALUES (5, 6, 403);
-        INSERT INTO itemData VALUES (5, 8, 404);
+        INSERT INTO itemData VALUES (6, 1, 401);
+        INSERT INTO itemData VALUES (6, 2, 402);
+        INSERT INTO itemData VALUES (6, 6, 403);
+        INSERT INTO itemData VALUES (6, 8, 404);
     """)
     conn.commit()
     conn.close()

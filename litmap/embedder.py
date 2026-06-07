@@ -22,8 +22,10 @@ _tokenizer = None
 def _get_model():
     global _model
     if _model is None:
+        import torch
         from sentence_transformers import SentenceTransformer
-        _model = SentenceTransformer(MODEL_NAME, device="mps")
+        device = "mps" if torch.backends.mps.is_available() else "cpu"
+        _model = SentenceTransformer(MODEL_NAME, device=device)
     return _model
 
 
@@ -125,24 +127,37 @@ def _existing_keys(db_path: Path) -> set[str]:
     return {r[0] for r in rows}
 
 
+# Title+abstract carries no useful signal past a few hundred tokens, and
+# batched encode pads every item in a 32-item batch to the batch's longest
+# sequence. On MPS the attention tensor is batch*heads*seq*seq, so a single
+# long abstract makes a batch allocate tens of GiB (observed: 48 GiB) and
+# crash. Cap the sequence length for this path; full-text uses its own cap.
+_ABSTRACT_MAX_TOKENS = 512
+
+
 def _embed_and_store(items: list[Item], db_path: Path) -> None:
     model = _get_model()
+    prev_max = model.max_seq_length
+    model.max_seq_length = _ABSTRACT_MAX_TOKENS
     texts = [f"{i.title} {i.abstract} {i.keywords}".strip() for i in items]
     conn = sqlite3.connect(db_path)
     now = datetime.now(timezone.utc).isoformat()
-    with tqdm(total=len(items), desc="Syncing new papers", unit="paper") as bar:
-        for batch_start in range(0, len(items), _BATCH_SIZE):
-            batch_items = items[batch_start:batch_start + _BATCH_SIZE]
-            batch_texts = texts[batch_start:batch_start + _BATCH_SIZE]
-            vecs = model.encode(batch_texts, normalize_embeddings=True, show_progress_bar=False)
-            for item, vec in zip(batch_items, vecs):
-                conn.execute(
-                    "INSERT OR REPLACE INTO embeddings (zotero_key, vector, embedded_at) VALUES (?, ?, ?)",
-                    (item.key, np.array(vec, dtype=np.float32).tobytes(), now),
-                )
-                bar.update(1)
-    conn.commit()
-    conn.close()
+    try:
+        with tqdm(total=len(items), desc="Syncing new papers", unit="paper") as bar:
+            for batch_start in range(0, len(items), _BATCH_SIZE):
+                batch_items = items[batch_start:batch_start + _BATCH_SIZE]
+                batch_texts = texts[batch_start:batch_start + _BATCH_SIZE]
+                vecs = model.encode(batch_texts, normalize_embeddings=True, show_progress_bar=False)
+                for item, vec in zip(batch_items, vecs):
+                    conn.execute(
+                        "INSERT OR REPLACE INTO embeddings (zotero_key, vector, embedded_at) VALUES (?, ?, ?)",
+                        (item.key, np.array(vec, dtype=np.float32).tobytes(), now),
+                    )
+                    bar.update(1)
+                conn.commit()  # per-batch: a crash loses ≤1 batch, resume is incremental
+    finally:
+        conn.close()
+        model.max_seq_length = prev_max
 
 
 # ---------------------------------------------------------------------------

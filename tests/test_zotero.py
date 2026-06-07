@@ -8,6 +8,21 @@ def test_get_all_items_excludes_attachments(zotero_db):
     assert 'AAAA0003' not in keys  # attachment excluded
 
 
+def test_get_all_items_personal_only_by_default(zotero_db):
+    # GRP00005 is in a group library (libraryID 999); excluded by default
+    items = get_all_items(zotero_db)
+    keys = {i.key for i in items}
+    assert 'GRP00005' not in keys
+    assert keys == {'AAAA0001', 'AAAA0002', 'AAAA0004'}
+
+
+def test_get_all_items_includes_groups_when_library_none(zotero_db):
+    items = get_all_items(zotero_db, library_id=None)
+    keys = {i.key for i in items}
+    assert 'GRP00005' in keys
+    assert len(items) == 4
+
+
 def test_get_all_items_fields(zotero_db):
     items = get_all_items(zotero_db)
     item = next(i for i in items if i.key == 'AAAA0001')
