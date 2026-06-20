@@ -44,6 +44,23 @@ def test_get_item_unknown_returns_none(zotero_db):
     assert get_item('NOTEXIST', zotero_db) is None
 
 
+def test_author_order_respects_orderindex(zotero_db_multiauthor):
+    """authors[0] must be the Zotero first author (orderIndex=0), not insertion order.
+
+    The fixture inserts creators with creatorID 10 (Zhao, orderIndex=2), 11 (Apple,
+    orderIndex=1), 12 (Muller-Karger, orderIndex=0) in that order — so GROUP_CONCAT
+    without ORDER BY would yield Zhao first. The fix adds ORDER BY ic.orderIndex, which
+    must return Muller-Karger as authors[0].
+    """
+    items = get_all_items(zotero_db_multiauthor)
+    assert len(items) == 1
+    item = items[0]
+    assert len(item.authors) == 3
+    assert item.authors[0] == "Muller-Karger, Frank E."
+    assert item.authors[1] == "Apple, Alice"
+    assert item.authors[2] == "Zhao, Xavier"
+
+
 def test_get_subcollection_map_returns_direct_collections_only(zotero_db):
     from litmap.zotero import get_subcollection_map
 
