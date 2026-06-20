@@ -86,6 +86,90 @@ def zotero_db(tmp_path):
         INSERT INTO collectionItems VALUES (1, 2);
         INSERT INTO collectionItems VALUES (2, 1);
         INSERT INTO collectionItems VALUES (2, 4);
+
+        CREATE TABLE itemAttachments (
+            itemID INTEGER PRIMARY KEY,
+            parentItemID INTEGER,
+            linkMode INTEGER,
+            contentType TEXT,
+            path TEXT
+        );
+    """)
+    conn.commit()
+    conn.close()
+    return db_path
+
+
+@pytest.fixture
+def zotero_db_multiauthor(tmp_path):
+    """Zotero DB with one item whose authors are inserted in reverse orderIndex order.
+
+    Creators are inserted with increasing creatorID but DECREASING orderIndex, so
+    GROUP_CONCAT without ORDER BY would yield the wrong (last) author first.
+    Correct first author: Muller-Karger (orderIndex=0, creatorID=12).
+    """
+    db_path = tmp_path / "zotero_multi.sqlite"
+    conn = sqlite3.connect(db_path)
+    conn.executescript("""
+        CREATE TABLE itemTypes (itemTypeID INTEGER PRIMARY KEY, typeName TEXT);
+        INSERT INTO itemTypes VALUES (2, 'journalArticle');
+        INSERT INTO itemTypes VALUES (14, 'attachment');
+        INSERT INTO itemTypes VALUES (26, 'note');
+
+        CREATE TABLE fields (fieldID INTEGER PRIMARY KEY, fieldName TEXT);
+        INSERT INTO fields VALUES (1, 'title');
+        INSERT INTO fields VALUES (2, 'abstractNote');
+        INSERT INTO fields VALUES (6, 'date');
+        INSERT INTO fields VALUES (8, 'DOI');
+
+        CREATE TABLE creatorTypes (creatorTypeID INTEGER PRIMARY KEY, creatorType TEXT);
+        INSERT INTO creatorTypes VALUES (1, 'author');
+
+        CREATE TABLE items (
+            itemID INTEGER PRIMARY KEY, itemTypeID INTEGER,
+            libraryID INTEGER DEFAULT 1, key TEXT
+        );
+        INSERT INTO items VALUES (1, 2, 1, 'MULTI001');
+
+        CREATE TABLE itemDataValues (valueID INTEGER PRIMARY KEY, value TEXT);
+        INSERT INTO itemDataValues VALUES (1, 'Ocean Biodiversity Study');
+        INSERT INTO itemDataValues VALUES (2, 'Abstract text');
+        INSERT INTO itemDataValues VALUES (3, '2018');
+        INSERT INTO itemDataValues VALUES (4, '10.9999/test');
+
+        CREATE TABLE itemData (itemID INTEGER, fieldID INTEGER, valueID INTEGER);
+        INSERT INTO itemData VALUES (1, 1, 1);
+        INSERT INTO itemData VALUES (1, 2, 2);
+        INSERT INTO itemData VALUES (1, 6, 3);
+        INSERT INTO itemData VALUES (1, 8, 4);
+
+        -- Creators inserted with highest creatorID first (Zhao, orderIndex=2),
+        -- so natural insertion order != authorship order.
+        CREATE TABLE creators (creatorID INTEGER PRIMARY KEY, firstName TEXT, lastName TEXT);
+        INSERT INTO creators VALUES (10, 'Xavier', 'Zhao');
+        INSERT INTO creators VALUES (11, 'Alice', 'Apple');
+        INSERT INTO creators VALUES (12, 'Frank E.', 'Muller-Karger');
+
+        CREATE TABLE itemCreators (
+            itemID INTEGER, creatorID INTEGER, creatorTypeID INTEGER, orderIndex INTEGER
+        );
+        -- Muller-Karger is first author (orderIndex=0) but has the highest creatorID
+        INSERT INTO itemCreators VALUES (1, 10, 1, 2);
+        INSERT INTO itemCreators VALUES (1, 11, 1, 1);
+        INSERT INTO itemCreators VALUES (1, 12, 1, 0);
+
+        CREATE TABLE collections (
+            collectionID INTEGER PRIMARY KEY, collectionName TEXT,
+            parentCollectionID INTEGER, libraryID INTEGER DEFAULT 1
+        );
+        CREATE TABLE collectionItems (collectionID INTEGER, itemID INTEGER);
+        CREATE TABLE itemAttachments (
+            itemID INTEGER PRIMARY KEY,
+            parentItemID INTEGER,
+            linkMode INTEGER,
+            contentType TEXT,
+            path TEXT
+        );
     """)
     conn.commit()
     conn.close()
@@ -105,6 +189,13 @@ def embeddings_db(tmp_path):
             zotero_key TEXT PRIMARY KEY,
             vector     BLOB NOT NULL,
             embedded_at TEXT NOT NULL
+        );
+        CREATE TABLE fulltext_embeddings (
+            zotero_key  TEXT PRIMARY KEY,
+            vector      BLOB NOT NULL,
+            embedded_at TEXT NOT NULL,
+            n_tokens    INTEGER,
+            n_chunks    INTEGER
         );
         CREATE TABLE meta (
             key   TEXT PRIMARY KEY,
