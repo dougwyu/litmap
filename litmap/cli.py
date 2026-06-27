@@ -13,6 +13,13 @@ _DEFAULT_ZOTERO = Path.home() / "Zotero" / "zotero.sqlite"
 
 
 def _auto_sync(db_path: Path, zotero_db: Path) -> None:
+    # Read-only consumer mode: when LITMAP_NO_SYNC is set, skip the implicit
+    # pre-search sync so a machine whose embeddings.db is received via Syncthing
+    # (receive-only folder) never writes to it -> no "Local Additions". The
+    # explicit `litmap sync` / `sync-fulltext` commands are unaffected.
+    import os
+    if os.environ.get("LITMAP_NO_SYNC"):
+        return
     from litmap.embedder import sync
     sync(db_path, zotero_db)
 
